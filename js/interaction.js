@@ -18,9 +18,10 @@ export class InteractionHandler {
   }
 
   initEvents() {
-    this.domElement.addEventListener('pointerdown', (e) => this.onPointerDown(e));
+    this.domElement.addEventListener('pointerdown', (e) => this.onPointerDown(e), { passive: true });
     this.domElement.addEventListener('pointerup', (e) => this.onPointerUp(e));
-    this.domElement.addEventListener('pointermove', (e) => this.onPointerMove(e));
+    this.domElement.addEventListener('pointercancel', () => { this.isPointerDown = false; });
+    this.domElement.addEventListener('pointermove', (e) => this.onPointerMove(e), { passive: true });
   }
 
   onPointerDown(e) {
@@ -38,8 +39,11 @@ export class InteractionHandler {
     const dist = Math.sqrt(dx * dx + dy * dy);
     const duration = performance.now() - this.pointerDownTime;
 
+    // Mobile touch has slightly larger fingertip contact area
+    const threshold = (e.pointerType === 'touch') ? 16 : 8;
+
     // If moved very little and tapped quickly, it's a deliberate click!
-    if (dist < this.dragThreshold && duration < 500) {
+    if (dist < threshold && duration < 500) {
       const rect = this.domElement.getBoundingClientRect();
       const normX = ((e.clientX - rect.left) / rect.width) * 2 - 1;
       const normY = -((e.clientY - rect.top) / rect.height) * 2 + 1;

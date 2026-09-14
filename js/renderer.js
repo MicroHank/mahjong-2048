@@ -31,6 +31,9 @@ export class GameRenderer {
     this.raycaster = new THREE.Raycaster();
     this.mouse = new THREE.Vector2();
 
+    // Mobile detection
+    this.isMobile = /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent) || window.innerWidth < 768;
+
     // Cache of Canvas Textures for numbers: "value_selectable" -> CanvasTexture
     this.textureCache = new Map();
     
@@ -43,11 +46,32 @@ export class GameRenderer {
     // Animation tickers
     this.activeTweens = [];
 
+    // Shared Reusable Geometry Pools (Eliminates GC stutter on mobile!)
+    this.tileBoxGeo = new THREE.BoxGeometry(0.88, 0.45, 0.88);
+    this.sphereParticleGeo = new THREE.SphereGeometry(0.045, 5, 5);
+    this.trailParticleGeo = new THREE.SphereGeometry(0.035, 4, 4);
+    this.shockwaveGeo = new THREE.RingGeometry(0.2, 0.38, 24);
+    this.tetraGeo = new THREE.TetrahedronGeometry(0.08);
+
     this.initThree();
     this.initLighting();
     this.initBoardEnvironment();
     this.animate = this.animate.bind(this);
     requestAnimationFrame(this.animate);
+  }
+
+  /**
+   * Safely disposes geometry only if it is NOT part of the shared pools
+   */
+  safeDisposeGeometry(geo) {
+    if (!geo) return;
+    if (geo !== this.tileBoxGeo &&
+        geo !== this.sphereParticleGeo &&
+        geo !== this.trailParticleGeo &&
+        geo !== this.shockwaveGeo &&
+        geo !== this.tetraGeo) {
+      geo.dispose();
+    }
   }
 
   initThree() {
@@ -57,30 +81,39 @@ export class GameRenderer {
     // Scene
     this.scene = new THREE.Scene();
     this.scene.background = new THREE.Color(0x0a0e17);
-    this.scene.fog = new THREE.FogExp2(0x0a0e17, 0.04);
+    this.scene.fog = new THREE.FogExp2(0x0a0e17, 0.035);
 
     // Camera
     this.camera = new THREE.PerspectiveCamera(45, width / height, 0.1, 100);
-    this.camera.position.set(0, 8, 11);
+    this.camera.position.set(0, 11, 14.5);
 
-    // WebGL Renderer
-    this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    // WebGL Renderer with performance-tailored settings
+    this.renderer = new THREE.WebGLRenderer({
+      antialias: !this.isMobile, // Disable MSAA on mobile for huge fill-rate boost
+      powerPreference: 'high-performance',
+      alpha: true
+    });
     this.renderer.setSize(width, height);
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    // Clamp DPR to 1.5 on mobile to avoid 3x retina fill-rate throttling
+    this.renderer.setPixelRatio(this.isMobile ? Math.min(window.devicePixelRatio, 1.5) : Math.min(window.devicePixelRatio, 2));
     this.renderer.shadowMap.enabled = true;
-    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    this.renderer.shadowMap.type = this.isMobile ? THREE.BasicShadowMap : THREE.PCFSoftShadowMap;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 1.15;
     this.container.appendChild(this.renderer.domElement);
 
-    // OrbitControls
+    // OrbitControls tailored for mobile touch
     this.controls = new OrbitControls(this.camera, this.renderer.domElement);
     this.controls.enableDamping = true;
-    this.controls.dampingFactor = 0.05;
+    this.controls.dampingFactor = 0.08;
     this.controls.maxPolarAngle = Math.PI / 2 - 0.05; // Do not go underground
-    this.controls.minDistance = 4;
-    this.controls.maxDistance = 22;
+    this.controls.minDistance = 5;
+    this.controls.maxDistance = 24;
     this.controls.target.set(0, 1.2, 0);
+    this.controls.touches = {
+      ONE: THREE.TOUCH.ROTATE,
+      TWO: THREE.TOUCH.DOLLY_PAN
+    };
 
     // Window resize
     window.addEventListener('resize', () => this.onResize());
@@ -91,12 +124,13 @@ export class GameRenderer {
     const ambientLight = new THREE.AmbientLight(0xdce7f5, 0.85);
     this.scene.add(ambientLight);
 
-    // Main Directional Sun Light (Casts soft shadows)
+    // Main Directional Sun Light
     const sunLight = new THREE.DirectionalLight(0xfff7ed, 1.6);
     sunLight.position.set(8, 16, 10);
     sunLight.castShadow = true;
-    sunLight.shadow.mapSize.width = 2048;
-    sunLight.shadow.mapSize.height = 2048;
+    const shadowRes = this.isMobile ? 1024 : 2048;
+    sunLight.shadow.mapSize.width = shadowRes;
+    sunLight.shadow.mapSize.height = shadowRes;
     sunLight.shadow.camera.near = 0.5;
     sunLight.shadow.camera.far = 35;
     sunLight.shadow.camera.left = -7;
@@ -268,8 +302,8 @@ export class GameRenderer {
    * Create 3D Mesh for a tile
    */
   createTileMesh(tile) {
-    // Tile dimensions: Width = 0.88, Height = 0.45, Depth = 0.88
-    const geo = new THREE.BoxGeometry(0.88, 0.45, 0.88);
+    // Shared tile geometry to avoid thousands of allocations
+    const geo = this.tileBoxGeo;
 
     const topTexture = this.getTileTopTexture(tile.value, tile.isSelectable);
 
@@ -317,7 +351,7 @@ export class GameRenderer {
     // Clean old meshes
     this.tileMeshes.forEach(mesh => {
       this.scene.remove(mesh);
-      mesh.geometry.dispose();
+      this.safeDisposeGeometry(mesh.geometry);
       mesh.material.forEach(m => m.dispose());
     });
     this.tileMeshes.clear();
@@ -488,7 +522,7 @@ export class GameRenderer {
 
         // Remove meshA from scene
         this.scene.remove(meshA);
-        meshA.geometry.dispose();
+        this.safeDisposeGeometry(meshA.geometry);
         meshA.material.forEach(m => m.dispose());
         this.tileMeshes.delete(tileA.id);
 
@@ -580,7 +614,7 @@ export class GameRenderer {
    * Trail sparks along the parabolic merge trajectory
    */
   createTrailParticle(pos, value) {
-    const geo = new THREE.SphereGeometry(0.045, 6, 6);
+    const geo = this.trailParticleGeo;
     const config = TILE_COLORS[value] || { bg: "#00f7ff" };
     const mat = new THREE.MeshBasicMaterial({ color: new THREE.Color(config.bg) });
     const p = new THREE.Mesh(geo, mat);
@@ -604,7 +638,7 @@ export class GameRenderer {
    * Expanding glowing shockwave ring on merge impact
    */
   createShockwave(pos, value) {
-    const geo = new THREE.RingGeometry(0.2, 0.38, 36);
+    const geo = this.shockwaveGeo;
     const config = TILE_COLORS[value] || { bg: "#00f7ff" };
     const mat = new THREE.MeshBasicMaterial({
       color: new THREE.Color(config.bg),
@@ -632,7 +666,7 @@ export class GameRenderer {
         requestAnimationFrame(tween);
       } else {
         this.scene.remove(ring);
-        geo.dispose();
+        this.safeDisposeGeometry(geo);
         mat.dispose();
       }
     };
@@ -643,14 +677,16 @@ export class GameRenderer {
    * Particle burst effect for merges
    */
   createMergeParticles(pos, value) {
-    const count = 30;
+    const count = this.isMobile ? 16 : 28;
     const config = TILE_COLORS[value] || { bg: "#f59e0b" };
     const color = new THREE.Color(config.bg);
 
     for (let i = 0; i < count; i++) {
-      const geo = new THREE.SphereGeometry(0.045 + Math.random() * 0.035, 6, 6);
+      const geo = this.sphereParticleGeo;
       const mat = new THREE.MeshBasicMaterial({ color: color });
       const p = new THREE.Mesh(geo, mat);
+      const s = 0.75 + Math.random() * 0.7;
+      p.scale.set(s, s, s);
       p.position.copy(pos);
 
       // Random spherical velocity
@@ -675,14 +711,16 @@ export class GameRenderer {
    * 2048 Legendary Supernova Explosion
    */
   create2048Explosion(pos) {
-    const count = 75;
+    const count = this.isMobile ? 36 : 70;
     const colors = [0xffd700, 0xff5722, 0xe056fd, 0x00c7b7, 0xffffff];
 
     for (let i = 0; i < count; i++) {
-      const geo = new THREE.TetrahedronGeometry(0.06 + Math.random() * 0.06);
+      const geo = this.tetraGeo;
       const color = colors[Math.floor(Math.random() * colors.length)];
       const mat = new THREE.MeshBasicMaterial({ color });
       const p = new THREE.Mesh(geo, mat);
+      const s = 0.75 + Math.random() * 0.7;
+      p.scale.set(s, s, s);
       p.position.copy(pos);
 
       const theta = Math.random() * Math.PI * 2;
@@ -714,7 +752,7 @@ export class GameRenderer {
 
     this.create2048Explosion(mesh.position);
     this.scene.remove(mesh);
-    mesh.geometry.dispose();
+    this.safeDisposeGeometry(mesh.geometry);
     mesh.material.forEach(m => m.dispose());
     this.tileMeshes.delete(tileId);
 
@@ -798,7 +836,7 @@ export class GameRenderer {
 
       if (p.life <= 0) {
         this.scene.remove(p.mesh);
-        p.mesh.geometry.dispose();
+        this.safeDisposeGeometry(p.mesh.geometry);
         p.mesh.material.dispose();
         this.particles.splice(i, 1);
       }

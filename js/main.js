@@ -41,6 +41,13 @@ class Mahjong2048Game {
   }
 
   initDOM() {
+    // Unlock Web Audio API on first user gesture (iOS Safari & Android requirement)
+    const unlockAudio = () => {
+      this.sound.ensureAudio();
+    };
+    window.addEventListener('touchstart', unlockAudio, { once: true, passive: true });
+    window.addEventListener('pointerdown', unlockAudio, { once: true, passive: true });
+
     // Score & Header
     this.scoreDisplay = document.getElementById('score-display');
     this.bestScoreDisplay = document.getElementById('best-score-display');

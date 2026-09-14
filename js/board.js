@@ -148,48 +148,63 @@ export class BoardModel {
   }
 
   /**
-   * Simulate gravity: tiles fall down into empty slots directly below them
+   * Simulate gravity: tiles fall down only when there is no support underneath.
+   * Prevents any two tiles from ever colliding or overlapping in 3D space.
    * Returns list of drops: [{ tile, fromY, toY, dropDistance }]
    */
   applyGravity() {
     const drops = [];
 
-    // Group tiles by (x, z) column
-    const columns = new Map();
-    this.tiles.forEach(t => {
-      const key = `${Math.round(t.x * 10) / 10},${Math.round(t.z * 10) / 10}`;
-      if (!columns.has(key)) columns.set(key, []);
-      columns.get(key).push(t);
-    });
+    // Sort all tiles ascending by Y (bottom up)
+    const sortedTiles = [...this.tiles].sort((a, b) => a.y - b.y);
 
-    // For each column, sort tiles ascending by Y and drop to lowest available slot
-    columns.forEach(colTiles => {
-      colTiles.sort((a, b) => a.y - b.y);
+    sortedTiles.forEach(tile => {
+      let targetY = tile.y;
 
-      // Check each tile from bottom up
-      colTiles.forEach((tile, index) => {
-        let lowestY = tile.y;
+      for (let testY = 0; testY < tile.y; testY++) {
+        // 1. Collision Check: Is testY already occupied or obstructed by ANY other tile?
+        const hasCollision = this.tiles.some(other =>
+          other.id !== tile.id &&
+          Math.abs(other.y - testY) < 0.4 &&
+          Math.abs(other.x - tile.x) < 0.75 &&
+          Math.abs(other.z - tile.z) < 0.75
+        );
 
-        // Check slots below tile.y
-        for (let targetY = 0; targetY < tile.y; targetY++) {
-          // Is targetY occupied by another tile in this column?
-          const occupied = colTiles.some(other => other !== tile && Math.abs(other.y - targetY) < 0.4);
-          if (!occupied) {
-            lowestY = targetY;
+        if (hasCollision) {
+          // Cannot drop to testY because it collides with another tile
+          continue;
+        }
+
+        // 2. Support Check: Can the tile rest at testY?
+        if (testY === 0) {
+          // Floor / ground pedestal supports all tiles at y=0
+          targetY = 0;
+          break;
+        } else {
+          // At height testY > 0, there MUST be at least one supporting tile at testY - 1 underneath it
+          const hasSupportBelow = this.tiles.some(other =>
+            other.id !== tile.id &&
+            Math.abs(other.y - (testY - 1)) < 0.4 &&
+            Math.abs(other.x - tile.x) < 0.75 &&
+            Math.abs(other.z - tile.z) < 0.75
+          );
+
+          if (hasSupportBelow) {
+            targetY = testY;
             break;
           }
         }
+      }
 
-        if (lowestY < tile.y) {
-          drops.push({
-            tile,
-            fromY: tile.y,
-            toY: lowestY,
-            dropDistance: tile.y - lowestY
-          });
-          tile.y = lowestY;
-        }
-      });
+      if (targetY < tile.y) {
+        drops.push({
+          tile,
+          fromY: tile.y,
+          toY: targetY,
+          dropDistance: tile.y - targetY
+        });
+        tile.y = targetY;
+      }
     });
 
     this.updateSelectability();

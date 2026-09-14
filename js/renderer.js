@@ -8,17 +8,17 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
 // Color Palette for 2048 numbers
 const TILE_COLORS = {
-  2:    { bg: "#f4ede4", text: "#685b52", border: "#e0d3c6" },
-  4:    { bg: "#ede0c8", text: "#685b52", border: "#decbaf" },
-  8:    { bg: "#f2b179", text: "#ffffff", border: "#e89f61" },
-  16:   { bg: "#f59563", text: "#ffffff", border: "#e87c44" },
-  32:   { bg: "#f67c5f", text: "#ffffff", border: "#e55f3f" },
-  64:   { bg: "#f65e3b", text: "#ffffff", border: "#d9421e" },
-  128:  { bg: "#edcf72", text: "#ffffff", border: "#d4b350", glow: true },
-  256:  { bg: "#edcc61", text: "#ffffff", border: "#cca83b", glow: true },
-  512:  { bg: "#4cd964", text: "#ffffff", border: "#34b84b", glow: true },
-  1024: { bg: "#00c7b7", text: "#ffffff", border: "#00a194", glow: true },
-  2048: { bg: "#ffd700", text: "#ffffff", border: "#ff9900", glow: true, legendary: true }
+  2:    { bg: "#ffffff", text: "#0f172a", border: "#cbd5e1" }, // 純淨陶瓷白
+  4:    { bg: "#fef08a", text: "#713f12", border: "#facc15" }, // 亮麗檸檬黃
+  8:    { bg: "#f97316", text: "#ffffff", border: "#ea580c" }, // 耀眼陽光橘
+  16:   { bg: "#ef4444", text: "#ffffff", border: "#dc2626" }, // 熱情赤烈紅
+  32:   { bg: "#ec4899", text: "#ffffff", border: "#db2777" }, // 霓虹艷麗粉
+  64:   { bg: "#a855f7", text: "#ffffff", border: "#9333ea" }, // 電光幻彩紫
+  128:  { bg: "#6366f1", text: "#ffffff", border: "#4f46e5", glow: true }, // 皇室深邃靛
+  256:  { bg: "#3b82f6", text: "#ffffff", border: "#2563eb", glow: true }, // 蔚藍天頂藍
+  512:  { bg: "#10b981", text: "#ffffff", border: "#059669", glow: true }, // 翡翠極光綠
+  1024: { bg: "#06b6d4", text: "#ffffff", border: "#0891b2", glow: true }, // 賽博青碧藍
+  2048: { bg: "#ffd700", text: "#ffffff", border: "#f59e0b", glow: true, legendary: true } // 終極耀眼流光金
 };
 
 export class GameRenderer {
@@ -214,30 +214,37 @@ export class GameRenderer {
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     
-    // Choose font size based on digits
+    // Choose font size based on digits (Significantly larger & bolder)
     const textStr = value.toString();
-    if (textStr.length <= 2) {
-      ctx.font = 'bold 190px Outfit, sans-serif';
+    if (textStr.length === 1) {
+      ctx.font = '900 270px Outfit, sans-serif';
+    } else if (textStr.length === 2) {
+      ctx.font = '900 230px Outfit, sans-serif';
     } else if (textStr.length === 3) {
-      ctx.font = 'bold 150px Outfit, sans-serif';
+      ctx.font = '900 185px Outfit, sans-serif';
     } else {
-      ctx.font = 'bold 125px Outfit, sans-serif';
+      ctx.font = '900 150px Outfit, sans-serif';
     }
 
-    // Drop shadow for text
-    ctx.shadowColor = 'rgba(0, 0, 0, 0.25)';
-    ctx.shadowBlur = 12;
-    ctx.shadowOffsetX = 3;
+    // High contrast outline stroke around numbers
+    ctx.lineJoin = 'round';
+    if (config.text === '#ffffff') {
+      ctx.strokeStyle = 'rgba(0, 0, 0, 0.45)';
+      ctx.lineWidth = (textStr.length <= 2) ? 14 : 10;
+      ctx.strokeText(textStr, 256, 256);
+    } else {
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.9)';
+      ctx.lineWidth = 12;
+      ctx.strokeText(textStr, 256, 256);
+    }
+
+    // Main text fill with subtle drop shadow
+    ctx.shadowColor = 'rgba(0, 0, 0, 0.35)';
+    ctx.shadowBlur = 10;
+    ctx.shadowOffsetX = 2;
     ctx.shadowOffsetY = 4;
     ctx.fillText(textStr, 256, 256);
     ctx.shadowColor = 'transparent';
-
-    // Sub-title label on bottom of tile
-    ctx.font = '600 36px "Noto Sans TC", sans-serif';
-    ctx.fillStyle = config.text;
-    ctx.globalAlpha = 0.65;
-    ctx.fillText("MAHJONG", 256, 430);
-    ctx.globalAlpha = 1.0;
 
     // If blocked / inactive: overlay darker veil + padlock icon
     if (!isSelectable) {

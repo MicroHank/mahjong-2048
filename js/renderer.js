@@ -118,35 +118,62 @@ export class GameRenderer {
   }
 
   initBoardEnvironment() {
-    // Pedestal Platform
-    const pedestalGeo = new THREE.CylinderGeometry(5.2, 5.8, 0.4, 64);
+    // Grand Pedestal Platform for Dual Heaps (左右兩堆大平台)
+    const pedestalGeo = new THREE.CylinderGeometry(7.2, 7.8, 0.45, 64);
     const pedestalMat = new THREE.MeshStandardMaterial({
       color: 0x111827,
       roughness: 0.7,
       metalness: 0.2
     });
     const pedestal = new THREE.Mesh(pedestalGeo, pedestalMat);
-    pedestal.position.y = -0.22;
+    pedestal.position.y = -0.23;
     pedestal.receiveShadow = true;
     this.scene.add(pedestal);
 
     // Cyber Grid on the pedestal
-    const gridHelper = new THREE.GridHelper(9, 18, 0x06b6d4, 0x1e293b);
+    const gridHelper = new THREE.GridHelper(13, 26, 0x06b6d4, 0x1e293b);
     gridHelper.position.y = -0.01;
     this.scene.add(gridHelper);
 
     // Glowing rim ring
-    const ringGeo = new THREE.RingGeometry(5.15, 5.3, 64);
+    const ringGeo = new THREE.RingGeometry(7.15, 7.35, 64);
     const ringMat = new THREE.MeshBasicMaterial({
       color: 0x06b6d4,
       side: THREE.DoubleSide,
       transparent: true,
-      opacity: 0.35
+      opacity: 0.4
     });
     const ring = new THREE.Mesh(ringGeo, ringMat);
     ring.rotation.x = -Math.PI / 2;
     ring.position.y = 0.01;
     this.scene.add(ring);
+
+    // 3D Selection Beacon (Floating Glowing Diamond & Rotating Cyber Ring)
+    const beaconGroup = new THREE.Group();
+
+    // Floating Golden Diamond
+    const diamondGeo = new THREE.OctahedronGeometry(0.2, 0);
+    const diamondMat = new THREE.MeshBasicMaterial({
+      color: 0xffd700
+    });
+    const diamondMesh = new THREE.Mesh(diamondGeo, diamondMat);
+    diamondMesh.position.y = 0.05;
+    beaconGroup.add(diamondMesh);
+
+    // Cyan Cyber Ring
+    const haloGeo = new THREE.TorusGeometry(0.38, 0.03, 8, 28);
+    const haloMat = new THREE.MeshBasicMaterial({
+      color: 0x06b6d4,
+      transparent: true,
+      opacity: 0.9
+    });
+    const haloMesh = new THREE.Mesh(haloGeo, haloMat);
+    haloMesh.rotation.x = Math.PI / 2;
+    beaconGroup.add(haloMesh);
+
+    beaconGroup.visible = false;
+    this.scene.add(beaconGroup);
+    this.selectionBeacon = beaconGroup;
   }
 
   /**
@@ -300,6 +327,9 @@ export class GameRenderer {
   /**
    * Update visual states (colors, textures, selection elevation, glows)
    */
+  /**
+   * Update visual states (colors, textures, selection elevation, glows)
+   */
   updateTileVisuals(tile) {
     const mesh = this.tileMeshes.get(tile.id);
     if (!mesh) return;
@@ -319,20 +349,33 @@ export class GameRenderer {
       }
     });
 
-    // Handle Selection State: Lift up slightly and emit warm golden glow
-    const targetY = tile.y * 0.46 + 0.225 + (tile.isSelected ? 0.22 : 0);
+    // Handle Selection State: Lift up distinctly (+0.38) and emit brilliant golden glow
+    const targetY = tile.y * 0.46 + 0.225 + (tile.isSelected ? 0.38 : 0);
     mesh.position.y = targetY;
 
     if (tile.isSelected) {
       mesh.material.forEach(mat => {
-        mat.emissive = new THREE.Color(0xf59e0b);
-        mat.emissiveIntensity = 0.35;
+        mat.emissive = new THREE.Color(0xffaa00);
+        mat.emissiveIntensity = 0.85;
       });
+      if (this.selectionBeacon) {
+        this.selectionBeacon.position.set(mesh.position.x, targetY + 0.62, mesh.position.z);
+        this.selectionBeacon.visible = true;
+      }
     } else {
       mesh.material.forEach(mat => {
         mat.emissive = new THREE.Color(0x000000);
         mat.emissiveIntensity = 0;
       });
+    }
+
+    // Check if any tile is currently selected to hide beacon if none
+    const anySelected = Array.from(this.tileMeshes.keys()).some(id => {
+      const m = this.tileMeshes.get(id);
+      return m && m.material[0] && m.material[0].emissiveIntensity > 0.5;
+    });
+    if (!anySelected && this.selectionBeacon) {
+      this.selectionBeacon.visible = false;
     }
   }
 
@@ -345,7 +388,7 @@ export class GameRenderer {
       if (mesh) {
         mesh.material.forEach(mat => {
           mat.emissive = new THREE.Color(0x06b6d4);
-          mat.emissiveIntensity = 0.6;
+          mat.emissiveIntensity = 0.75;
         });
       }
     });
@@ -361,7 +404,7 @@ export class GameRenderer {
   }
 
   /**
-   * Animate tile A flying into tile B and merging!
+   * Animate tile A flying into tile B with 3D Trajectory Route Line and Impact FX!
    */
   animateMerge(tileA, tileB, onComplete) {
     const meshA = this.tileMeshes.get(tileA.id);
@@ -372,9 +415,33 @@ export class GameRenderer {
       return;
     }
 
+    // Hide selection beacon immediately
+    if (this.selectionBeacon) {
+      this.selectionBeacon.visible = false;
+    }
+
     const startPos = meshA.position.clone();
     const endPos = meshB.position.clone();
-    const duration = 280; // ms
+    const dist = startPos.distanceTo(endPos);
+
+    // Calculate dynamic arc peak based on distance
+    const midPos = startPos.clone().add(endPos).multiplyScalar(0.5);
+    midPos.y = Math.max(startPos.y, endPos.y) + Math.min(2.8, 1.0 + dist * 0.22);
+
+    // Create 3D Luminous Trajectory Route Line (光弧能量路線)
+    const curve = new THREE.QuadraticBezierCurve3(startPos, midPos, endPos);
+    const points = curve.getPoints(40);
+    const lineGeo = new THREE.BufferGeometry().setFromPoints(points);
+    const lineMat = new THREE.LineBasicMaterial({
+      color: 0x00f7ff, // Glowing cyan neon
+      linewidth: 3,
+      transparent: true,
+      opacity: 0.95
+    });
+    const trajectoryLine = new THREE.Line(lineGeo, lineMat);
+    this.scene.add(trajectoryLine);
+
+    const duration = Math.min(420, Math.max(260, dist * 50)); // Scaled by distance
     const startTime = performance.now();
 
     const tween = (now) => {
@@ -383,19 +450,36 @@ export class GameRenderer {
       // Ease-out cubic
       const ease = 1 - Math.pow(1 - progress, 3);
 
-      // Arc interpolation: lift in mid-air
-      meshA.position.lerpVectors(startPos, endPos, ease);
-      meshA.position.y += Math.sin(progress * Math.PI) * 0.4;
-      meshA.scale.setScalar(1 - progress * 0.3);
+      // Follow the 3D parabolic trajectory route
+      const curPos = curve.getPoint(ease);
+      meshA.position.copy(curPos);
+      meshA.rotation.y = ease * Math.PI * 1.5; // Dynamic spin
+      meshA.scale.setScalar(1 - progress * 0.25);
+
+      // Emit trail sparks along the flight path
+      if (Math.random() < 0.6) {
+        this.createTrailParticle(curPos, tileA.value);
+      }
 
       if (progress < 1) {
         requestAnimationFrame(tween);
       } else {
-        // Arrived! Pop scale meshB
-        this.animatePop(meshB);
+        // Arrived at tile B!
+        // Remove trajectory route line
+        this.scene.remove(trajectoryLine);
+        lineGeo.dispose();
+        lineMat.dispose();
+
+        // 1. Trigger Expanding Ground Shockwave Ring
+        this.createShockwave(endPos, tileB.value);
+
+        // 2. Trigger Spark Explosion Particles
         this.createMergeParticles(endPos, tileB.value);
 
-        // Remove meshA
+        // 3. Pop & Squash scale bounce on Tile B
+        this.animatePop(meshB);
+
+        // Remove meshA from scene
         this.scene.remove(meshA);
         meshA.geometry.dispose();
         meshA.material.forEach(m => m.dispose());
@@ -486,15 +570,78 @@ export class GameRenderer {
   }
 
   /**
+   * Trail sparks along the parabolic merge trajectory
+   */
+  createTrailParticle(pos, value) {
+    const geo = new THREE.SphereGeometry(0.045, 6, 6);
+    const config = TILE_COLORS[value] || { bg: "#00f7ff" };
+    const mat = new THREE.MeshBasicMaterial({ color: new THREE.Color(config.bg) });
+    const p = new THREE.Mesh(geo, mat);
+    p.position.copy(pos);
+    p.position.x += (Math.random() - 0.5) * 0.12;
+    p.position.y += (Math.random() - 0.5) * 0.12;
+    p.position.z += (Math.random() - 0.5) * 0.12;
+
+    this.scene.add(p);
+    this.particles.push({
+      mesh: p,
+      vx: (Math.random() - 0.5) * 0.02,
+      vy: (Math.random() - 0.5) * 0.02,
+      vz: (Math.random() - 0.5) * 0.02,
+      life: 0.6,
+      decay: 0.06
+    });
+  }
+
+  /**
+   * Expanding glowing shockwave ring on merge impact
+   */
+  createShockwave(pos, value) {
+    const geo = new THREE.RingGeometry(0.2, 0.38, 36);
+    const config = TILE_COLORS[value] || { bg: "#00f7ff" };
+    const mat = new THREE.MeshBasicMaterial({
+      color: new THREE.Color(config.bg),
+      side: THREE.DoubleSide,
+      transparent: true,
+      opacity: 0.95
+    });
+    const ring = new THREE.Mesh(geo, mat);
+    ring.rotation.x = -Math.PI / 2;
+    ring.position.copy(pos);
+    ring.position.y += 0.04;
+    this.scene.add(ring);
+
+    const startTime = performance.now();
+    const duration = 360;
+
+    const tween = (now) => {
+      const elapsed = now - startTime;
+      const progress = Math.min(elapsed / duration, 1);
+      const scale = 1 + progress * 3.4;
+      ring.scale.set(scale, scale, 1);
+      ring.material.opacity = 0.95 * (1 - Math.pow(progress, 2));
+
+      if (progress < 1) {
+        requestAnimationFrame(tween);
+      } else {
+        this.scene.remove(ring);
+        geo.dispose();
+        mat.dispose();
+      }
+    };
+    requestAnimationFrame(tween);
+  }
+
+  /**
    * Particle burst effect for merges
    */
   createMergeParticles(pos, value) {
-    const count = 22;
+    const count = 30;
     const config = TILE_COLORS[value] || { bg: "#f59e0b" };
     const color = new THREE.Color(config.bg);
 
     for (let i = 0; i < count; i++) {
-      const geo = new THREE.SphereGeometry(0.04 + Math.random() * 0.03, 6, 6);
+      const geo = new THREE.SphereGeometry(0.045 + Math.random() * 0.035, 6, 6);
       const mat = new THREE.MeshBasicMaterial({ color: color });
       const p = new THREE.Mesh(geo, mat);
       p.position.copy(pos);
@@ -502,9 +649,9 @@ export class GameRenderer {
       // Random spherical velocity
       const theta = Math.random() * Math.PI * 2;
       const phi = Math.random() * Math.PI;
-      const speed = 0.04 + Math.random() * 0.07;
+      const speed = 0.05 + Math.random() * 0.09;
       const vx = Math.sin(phi) * Math.cos(theta) * speed;
-      const vy = (Math.cos(phi) * 0.5 + 0.5) * speed + 0.03;
+      const vy = (Math.cos(phi) * 0.5 + 0.5) * speed + 0.04;
       const vz = Math.sin(phi) * Math.sin(theta) * speed;
 
       this.scene.add(p);
@@ -574,15 +721,15 @@ export class GameRenderer {
     const target = this.controls.target;
     switch(type) {
       case 'top':
-        this.camera.position.set(0, 14, 0.01);
+        this.camera.position.set(0, 17, 0.01);
         break;
       case 'front':
-        this.camera.position.set(0, 3, 13);
+        this.camera.position.set(0, 4.5, 15);
         break;
       case 'iso':
       case 'reset':
       default:
-        this.camera.position.set(8, 9, 10);
+        this.camera.position.set(0, 11, 14.5);
         break;
     }
     this.camera.lookAt(target);
@@ -623,6 +770,14 @@ export class GameRenderer {
 
     // Update Controls
     this.controls.update();
+
+    // Animate 3D Selection Beacon
+    if (this.selectionBeacon && this.selectionBeacon.visible) {
+      this.selectionBeacon.rotation.y += 0.045;
+      if (this.selectionBeacon.children[0]) {
+        this.selectionBeacon.children[0].rotation.y -= 0.06;
+      }
+    }
 
     // Update Particles
     for (let i = this.particles.length - 1; i >= 0; i--) {

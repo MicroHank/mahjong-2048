@@ -1,186 +1,255 @@
 /**
  * Level Definitions & Solvable Layouts for 3D Mahjong 2048
- * Defines 3D coordinate grids (x, y, z) and guaranteed solvable binary decomposition numbers.
+ * Grand Dual-Heap (左右兩堆) Layouts with Guaranteed Binary Decomposition Solvability.
  */
 
 export const LEVELS = [
   {
     id: 1,
-    name: "階梯金字塔",
-    desc: "新手入門：頂層與外圍開闊，多重可選配對，輕鬆體會合併與下墜",
+    name: "雙子階梯金字塔",
+    desc: "宏偉左右雙峰金字塔，開闊無遮蔽，左右跨陣地自由連鎖合併！",
     icon: "🔺",
-    targetValue: 2048,
-    targetScore: 10000,
-    generateGrid: () => {
-      const coords = [];
-      // Tier 0 (Bottom): 4x4 base (16 tiles)
-      for (let x = -1.5; x <= 1.5; x += 1) {
-        for (let z = -1.5; z <= 1.5; z += 1) {
-          coords.push({ x, y: 0, z });
-        }
-      }
-      // Tier 1 (Mid): 2x2 centered (4 tiles)
-      for (let x = -0.5; x <= 0.5; x += 1) {
-        for (let z = -0.5; z <= 0.5; z += 1) {
-          coords.push({ x, y: 1, z });
-        }
-      }
-      // Tier 2 (Peak): 2x1 dual peaks (2 tiles, guaranteed open pairs!)
-      coords.push({ x: -0.5, y: 2, z: 0 });
-      coords.push({ x: 0.5, y: 2, z: 0 });
-
-      return coords; // Total 22 tiles
-    }
-  },
-  {
-    id: 2,
-    name: "雙子懸空塔",
-    desc: "柱狀結構：消除底層柱腳會觸發大幅度垂直下墜連鎖！",
-    icon: "🗼",
     targetValue: 2048,
     targetScore: 15000,
     generateGrid: () => {
       const coords = [];
-      // Tower A: 2x2 at x in [-2, -1], z in [-0.5, 0.5], y from 0 to 2 (12 tiles)
-      for (let y = 0; y <= 2; y++) {
-        for (let x = -2; x <= -1; x++) {
-          for (let z = -0.5; z <= 0.5; z++) {
-            coords.push({ x, y, z });
-          }
+      // === 左堆金字塔 (Center at x = -2.5) ===
+      // Tier 0 (Bottom): 3x3 (9 tiles)
+      for (let x = -3.5; x <= -1.5; x += 1) {
+        for (let z = -1; z <= 1; z += 1) {
+          coords.push({ x, y: 0, z });
         }
       }
-      // Tower B: 2x2 at x in [1, 2], z in [-0.5, 0.5], y from 0 to 2 (12 tiles)
-      for (let y = 0; y <= 2; y++) {
-        for (let x = 1; x <= 2; x++) {
-          for (let z = -0.5; z <= 0.5; z++) {
-            coords.push({ x, y, z });
-          }
+      // Tier 1 (Mid): 2x2 (4 tiles)
+      for (let x = -3; x <= -2; x += 1) {
+        for (let z = -0.5; z <= 0.5; z += 1) {
+          coords.push({ x, y: 1, z });
         }
       }
-      // Connecting Skybridge at y = 1 (2 tiles)
-      coords.push({ x: -0.2, y: 1, z: -0.5 });
-      coords.push({ x: 0.2, y: 1, z: 0.5 });
+      // Tier 2 (Peak): 1 tile
+      coords.push({ x: -2.5, y: 2, z: 0 });
 
-      return coords; // Total 26 tiles
+      // === 右堆金字塔 (Center at x = 2.5) ===
+      // Tier 0 (Bottom): 3x3 (9 tiles)
+      for (let x = 1.5; x <= 3.5; x += 1) {
+        for (let z = -1; z <= 1; z += 1) {
+          coords.push({ x, y: 0, z });
+        }
+      }
+      // Tier 1 (Mid): 2x2 (4 tiles)
+      for (let x = 2; x <= 3; x += 1) {
+        for (let z = -0.5; z <= 0.5; z += 1) {
+          coords.push({ x, y: 1, z });
+        }
+      }
+      // Tier 2 (Peak): 1 tile
+      coords.push({ x: 2.5, y: 2, z: 0 });
+
+      // === 中央連通石階 ===
+      coords.push({ x: -0.6, y: 0, z: 0 });
+      coords.push({ x: 0.6, y: 0, z: 0 });
+
+      return coords; // Total: 14 + 14 + 2 = 30 tiles
     }
   },
   {
-    id: 3,
-    name: "萬花魔術方塊",
-    desc: "實心立方體：必須從外側六個方位逐步往核心「剝洋蔥」！",
-    icon: "🧊",
+    id: 2,
+    name: "雙塔天梯要塞",
+    desc: "高聳入雲的左翼與右翼雙子塔，消除底層將觸發壯觀的重力大崩塌！",
+    icon: "🗼",
     targetValue: 2048,
     targetScore: 20000,
     generateGrid: () => {
       const coords = [];
-      // 3x3x3 solid cube = 27 tiles
-      for (let x = -1; x <= 1; x++) {
-        for (let y = 0; y <= 2; y++) {
+      // === 左翼高塔 (Center x = -2.5) ===
+      for (let y = 0; y <= 2; y++) {
+        for (let x = -3; x <= -2; x++) {
+          for (let z = -0.5; z <= 0.5; z++) {
+            coords.push({ x, y, z }); // 2x2x3 = 12 tiles
+          }
+        }
+      }
+      coords.push({ x: -2.5, y: 3, z: -0.5 });
+      coords.push({ x: -2.5, y: 3, z: 0.5 }); // Top floor: 2 tiles
+
+      // === 右翼高塔 (Center x = 2.5) ===
+      for (let y = 0; y <= 2; y++) {
+        for (let x = 2; x <= 3; x++) {
+          for (let z = -0.5; z <= 0.5; z++) {
+            coords.push({ x, y, z }); // 12 tiles
+          }
+        }
+      }
+      coords.push({ x: 2.5, y: 3, z: -0.5 });
+      coords.push({ x: 2.5, y: 3, z: 0.5 }); // Top floor: 2 tiles
+
+      // === 中央天橋與連通走道 ===
+      coords.push({ x: -1.2, y: 1, z: 0 });
+      coords.push({ x: 0, y: 1, z: 0 });
+      coords.push({ x: 1.2, y: 1, z: 0 });
+      coords.push({ x: 0, y: 2, z: 0 });
+      // 地面護衛柱
+      coords.push({ x: -2.5, y: 0, z: -1.5 });
+      coords.push({ x: -2.5, y: 0, z: 1.5 });
+      coords.push({ x: 2.5, y: 0, z: -1.5 });
+      coords.push({ x: 2.5, y: 0, z: 1.5 });
+
+      return coords; // Total: 14 + 14 + 8 = 36 tiles
+    }
+  },
+  {
+    id: 3,
+    name: "雙生萬花魔術方塊",
+    desc: "並列於空間兩端的實心雙子方體，由外向內逐步剝除多維外殼！",
+    icon: "🧊",
+    targetValue: 2048,
+    targetScore: 25000,
+    generateGrid: () => {
+      const coords = [];
+      // === 左方體 (x: -3.5 to -1.5, y: 0 to 1, z: -1 to 1) 3x2x3 = 18 tiles ===
+      for (let x = -3.5; x <= -1.5; x++) {
+        for (let y = 0; y <= 1; y++) {
           for (let z = -1; z <= 1; z++) {
             coords.push({ x, y, z });
           }
         }
       }
-      return coords; // Total 27 tiles
+      coords.push({ x: -2.5, y: 2, z: 0 }); // Top gem: 1 tile
+
+      // === 右方體 (x: 1.5 to 3.5, y: 0 to 1, z: -1 to 1) 3x2x3 = 18 tiles ===
+      for (let x = 1.5; x <= 3.5; x++) {
+        for (let y = 0; y <= 1; y++) {
+          for (let z = -1; z <= 1; z++) {
+            coords.push({ x, y, z });
+          }
+        }
+      }
+      coords.push({ x: 2.5, y: 2, z: 0 }); // Top gem: 1 tile
+
+      return coords; // Total: 19 + 19 = 38 tiles
     }
   },
   {
     id: 4,
-    name: "東方長城要塞",
-    desc: "要塞城堡：外圍城牆守護中央主塔，考驗水平與垂直邊緣選定戰略",
+    name: "東西雙城要塞",
+    desc: "兩座固若金湯的雙城要塞隔空對峙，豐富的外牆防禦與多層主塔！",
     icon: "🏯",
     targetValue: 2048,
-    targetScore: 25000,
+    targetScore: 30000,
     generateGrid: () => {
       const coords = [];
-      // Outer 4x4 wall ring at y=0 (12 border tiles)
-      for (let x = -1.5; x <= 1.5; x++) {
+      // === 左城塞 (Center x = -2.5) ===
+      for (let x = -3.5; x <= -1.5; x++) {
         for (let z = -1.5; z <= 1.5; z++) {
-          const isBorder = (Math.abs(x) === 1.5 || Math.abs(z) === 1.5);
-          if (isBorder) {
+          const isOuter = (x === -3.5 || x === -1.5 || z === -1.5 || z === 1.5);
+          if (isOuter) {
             coords.push({ x, y: 0, z });
-            // Corner towers at y=1
-            if (Math.abs(x) === 1.5 && Math.abs(z) === 1.5) {
+            // 四角箭樓
+            if ((x === -3.5 || x === -1.5) && (z === -1.5 || z === 1.5)) {
               coords.push({ x, y: 1, z });
             }
           }
         }
       }
-      // Central Keep (Inside 2x2) at y=0, 1, 2
-      for (let x = -0.5; x <= 0.5; x++) {
-        for (let z = -0.5; z <= 0.5; z++) {
-          coords.push({ x, y: 0, z });
-          coords.push({ x, y: 1, z });
-          coords.push({ x, y: 2, z });
+      // 左主樓
+      coords.push({ x: -2.5, y: 0, z: 0 });
+      coords.push({ x: -2.5, y: 1, z: 0 });
+      coords.push({ x: -2.5, y: 2, z: 0 });
+
+      // === 右城塞 (Center x = 2.5) ===
+      for (let x = 1.5; x <= 3.5; x++) {
+        for (let z = -1.5; z <= 1.5; z++) {
+          const isOuter = (x === 1.5 || x === 3.5 || z === -1.5 || z === 1.5);
+          if (isOuter) {
+            coords.push({ x, y: 0, z });
+            if ((x === 1.5 || x === 3.5) && (z === -1.5 || z === 1.5)) {
+              coords.push({ x, y: 1, z });
+            }
+          }
         }
       }
-      return coords; // Total 12 + 4 + 12 = 28 tiles
+      // 右主樓
+      coords.push({ x: 2.5, y: 0, z: 0 });
+      coords.push({ x: 2.5, y: 1, z: 0 });
+      coords.push({ x: 2.5, y: 2, z: 0 });
+
+      // === 中央城門橋 ===
+      coords.push({ x: -0.6, y: 0, z: 0 });
+      coords.push({ x: 0.6, y: 0, z: 0 });
+
+      return coords; // Total: 15 + 15 + 2 = 32 tiles
     }
   },
   {
     id: 5,
-    name: "天空螺旋神殿",
-    desc: "極限挑戰：旋轉騰空石階，高度落差極大，考驗立體空間感知",
+    name: "雙螺旋星雲聖殿",
+    desc: "宇宙級雙生螺旋石階，極限高度落差，左右呼應的終極立體幾何挑戰！",
     icon: "🌀",
     targetValue: 2048,
-    targetScore: 30000,
+    targetScore: 40000,
     generateGrid: () => {
       const coords = [];
-      // Central column (height 0 to 3)
+      // === 左螺旋 (x: -2.5) ===
       for (let y = 0; y <= 3; y++) {
-        coords.push({ x: 0, y, z: 0 });
+        coords.push({ x: -2.5, y, z: 0 }); // 芯柱
       }
-      // Ascending spiral steps
-      const steps = [
-        // Level 0 ground wings
-        { x: 1, y: 0, z: 0 },
-        { x: -1, y: 0, z: 0 },
-        { x: 0, y: 0, z: 1 },
-        { x: 0, y: 0, z: -1 },
-        { x: 1, y: 0, z: 1 },
-        { x: -1, y: 0, z: -1 },
-        // Level 1 steps
-        { x: 1, y: 1, z: 0 },
-        { x: 1, y: 1, z: -1 },
-        { x: 0, y: 1, z: -1 },
-        { x: -1, y: 1, z: 0 },
-        { x: -1, y: 1, z: 1 },
-        // Level 2 steps
-        { x: -1, y: 2, z: 0 },
-        { x: -1, y: 2, z: -1 },
-        { x: 0, y: 2, z: 1 },
-        { x: 1, y: 2, z: 1 },
-        // Level 3 steps
-        { x: 1, y: 3, z: 0 },
-        { x: 0, y: 3, z: -1 },
-        { x: -1, y: 3, z: 0 },
-        { x: 0, y: 3, z: 1 },
-        // Peak Crown at y=4
-        { x: -0.5, y: 4, z: 0 },
-        { x: 0.5, y: 4, z: 0 }
+      const leftSteps = [
+        { x: -1.5, y: 0, z: 0 },
+        { x: -1.5, y: 0, z: 1 },
+        { x: -2.5, y: 1, z: 1 },
+        { x: -3.5, y: 1, z: 1 },
+        { x: -3.5, y: 2, z: 0 },
+        { x: -3.5, y: 2, z: -1 },
+        { x: -2.5, y: 3, z: -1 },
+        { x: -1.5, y: 3, z: -1 },
+        { x: -2.5, y: 4, z: 0 },
+        // 底層衛翼
+        { x: -3.5, y: 0, z: -1 },
+        { x: -3.5, y: 0, z: 0 },
+        { x: -2.5, y: 0, z: -1 }
       ];
-      steps.forEach(s => coords.push(s));
-      return coords; // Total 25 tiles
+      leftSteps.forEach(s => coords.push(s)); // 4 + 12 = 16 tiles
+
+      // === 右螺旋 (x: 2.5) ===
+      for (let y = 0; y <= 3; y++) {
+        coords.push({ x: 2.5, y, z: 0 }); // 芯柱
+      }
+      const rightSteps = [
+        { x: 1.5, y: 0, z: 0 },
+        { x: 1.5, y: 0, z: 1 },
+        { x: 2.5, y: 1, z: 1 },
+        { x: 3.5, y: 1, z: 1 },
+        { x: 3.5, y: 2, z: 0 },
+        { x: 3.5, y: 2, z: -1 },
+        { x: 2.5, y: 3, z: -1 },
+        { x: 1.5, y: 3, z: -1 },
+        { x: 2.5, y: 4, z: 0 },
+        // 底層衛翼
+        { x: 3.5, y: 0, z: -1 },
+        { x: 3.5, y: 0, z: 0 },
+        { x: 2.5, y: 0, z: -1 }
+      ];
+      rightSteps.forEach(s => coords.push(s)); // 4 + 12 = 16 tiles
+
+      // === 聖域中樞連接台 ===
+      coords.push({ x: -0.6, y: 0, z: 0 });
+      coords.push({ x: 0.6, y: 0, z: 0 });
+      coords.push({ x: 0, y: 1, z: 0 });
+
+      return coords; // Total: 16 + 16 + 3 = 35 tiles
     }
   }
 ];
 
 /**
- * Generates numbers using Binary Merge Decomposition.
- * Decomposes 2048 targets into smaller numbers, guaranteeing that:
- * 1. The numbers can 100% mathematically merge into 2048 with ZERO orphan tiles!
- * 2. Smaller numbers are placed on more accessible / top positions.
- * 3. At turn 1, multiple matching pairs are guaranteed to be unblocked and ready to merge!
- * 
- * @param {Array} coords Grid coordinate list
- * @param {number} levelId Level ID
- * @param {number} targetValue Target value to eliminate (default 2048)
+ * Binary Merge Decomposition Number Generator
+ * Decomposes 2048 targets into smaller numbers, guaranteeing 100% solvability.
  */
 export function generateNumbersForGrid(coords, levelId = 1, targetValue = 2048) {
   const count = coords.length;
 
-  // Determine number of target blocks (e.g., 20~30 tiles decompose from 2 or 3 targets)
-  const numTargets = Math.max(1, Math.floor(count / 11));
+  // Number of 2048 targets (e.g. 30~38 tiles decompose from 3 or 4 targets of 2048)
+  const numTargets = Math.max(1, Math.floor(count / 10));
   let list = Array(numTargets).fill(targetValue);
 
   // Decompose values via binary split: V -> V/2 + V/2
@@ -205,11 +274,11 @@ export function generateNumbersForGrid(coords, levelId = 1, targetValue = 2048) 
   list.sort((a, b) => a - b);
 
   // Sort coordinates by spatial accessibility:
-  // Higher Y first; for same Y, outermost (larger |x| + |z|) first
+  // Higher Y first; for same Y, outermost (larger |x|) first
   const sortedCoords = [...coords].sort((a, b) => {
     if (b.y !== a.y) return b.y - a.y;
-    const distA = Math.abs(a.x) + Math.abs(a.z);
-    const distB = Math.abs(b.x) + Math.abs(b.z);
+    const distA = Math.abs(a.x) * 1.5 + Math.abs(a.z);
+    const distB = Math.abs(b.x) * 1.5 + Math.abs(b.z);
     return distB - distA;
   });
 

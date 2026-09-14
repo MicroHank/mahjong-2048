@@ -49,11 +49,13 @@ class Mahjong2048Game {
     this.levelNameDisplay = document.getElementById('current-level-name');
     this.remainingTilesDisplay = document.getElementById('remaining-tiles-count');
 
-    // Rule mode button
+    // Rule mode button (if present)
     this.ruleModeBtn = document.getElementById('rule-mode-btn');
-    this.ruleModeIcon = document.getElementById('rule-mode-icon');
-    this.ruleModeText = document.getElementById('rule-mode-text');
-    this.ruleModeBtn.addEventListener('click', () => this.toggleRuleMode());
+    if (this.ruleModeBtn) {
+      this.ruleModeIcon = document.getElementById('rule-mode-icon');
+      this.ruleModeText = document.getElementById('rule-mode-text');
+      this.ruleModeBtn.addEventListener('click', () => this.toggleRuleMode());
+    }
 
     // Audio button
     this.audioBtn = document.getElementById('audio-toggle-btn');

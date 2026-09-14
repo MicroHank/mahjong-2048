@@ -112,12 +112,11 @@ export class BoardModel {
 
   /**
    * Recompute isSelectable flag for all alive tiles
+   * Casual Mode: Unblocked from top is selectable
    */
   updateSelectability() {
     this.tiles.forEach(tile => {
-      const topBlocked = this.isTopBlocked(tile);
-      const edgeBlocked = this.isEdgeBlocked(tile);
-      tile.isSelectable = !topBlocked && !edgeBlocked;
+      tile.isSelectable = !this.isTopBlocked(tile);
     });
   }
 

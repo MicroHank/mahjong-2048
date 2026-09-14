@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>3D 疊疊樂麻將 2048 - 空間立體合併消除益智遊戲</title>
+  <meta name="description" content="結合2048合併消除與3D立體麻將消消樂（Mahjong Solitaire）的創新益智遊戲。點選無遮蔽方塊進行合併，觸發重力連鎖下墜，朝2048終極目標邁進！">
+
+  <!-- Google Fonts: Outfit & Noto Sans TC -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;600;700;900&family=Outfit:wght@400;600;700;900&display=swap" rel="stylesheet">
+
+  <link rel="stylesheet" href="css/style.css">
+
+  <!-- Three.js and OrbitControls via ES Modules Import Map -->
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+        "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+      }
+    }
+  </script>
+</head>
+<body>
+  <!-- 3D Canvas Viewport -->
+  <div id="canvas-container"></div>
+
+  <!-- Ambient Light FX Overlay -->
+  <div class="ambient-glow top-left"></div>
+  <div class="ambient-glow bottom-right"></div>
+
+  <!-- HUD Interface -->
+  <div id="hud">
+    <!-- Top Header Bar -->
+    <header class="top-bar">
+      <div class="brand-zone">
+        <div class="logo-icon">🀄</div>
+        <div class="brand-text">
+          <h1 class="game-title">MAHJONG <span class="accent-2048">2048</span> 3D</h1>
+          <span class="subtitle">立體疊疊樂 · 空間消除</span>
+        </div>
+      </div>
+
+      <!-- Level & Rule Selector -->
+      <div class="level-badge-container">
+        <button id="level-select-btn" class="glass-pill level-pill" title="選擇關卡">
+          <span class="pill-icon">🏰</span>
+          <span id="current-level-name">第 1 關：階梯金字塔</span>
+          <span class="dropdown-arrow">▼</span>
+        </button>
+
+        <div class="rule-toggle-wrapper" title="切換選定自由度規則">
+          <span class="rule-label">規則：</span>
+          <button id="rule-mode-btn" class="glass-pill rule-pill">
+            <span id="rule-mode-icon">🍃</span>
+            <span id="rule-mode-text">直覺休閒</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Scoreboard & Controls -->
+      <div class="stats-zone">
+        <div class="stat-card">
+          <span class="stat-title">SCORE 分數</span>
+          <div class="stat-value-box">
+            <span id="score-display">0</span>
+            <span id="score-popup" class="score-float"></span>
+          </div>
+        </div>
+        <div class="stat-card">
+          <span class="stat-title">BEST 最高</span>
+          <span id="best-score-display">0</span>
+        </div>
+        <div class="quick-icons">
+          <button id="audio-toggle-btn" class="icon-btn" title="開啟/關閉音效">🔊</button>
+          <button id="help-btn" class="icon-btn" title="玩法說明">❓</button>
+        </div>
+      </div>
+    </header>
+
+    <!-- Center Floating Combo/Notice Banner -->
+    <div id="floating-banner" class="floating-banner hidden">
+      <div class="banner-content">
+        <span class="banner-star">✨</span>
+        <span id="banner-text">COMBO x2!</span>
+        <span class="banner-star">✨</span>
+      </div>
+    </div>
+
+    <!-- 3D Camera Quick Controls (Right side) -->
+    <div class="camera-panel">
+      <button class="cam-btn" data-cam="iso" title="等角立體視角 (Isometric)">📐 3D</button>
+      <button class="cam-btn" data-cam="top" title="正上方鳥瞰 (Top-down)">🎯 頂視</button>
+      <button class="cam-btn" data-cam="front" title="正視視角 (Front)">🏢 正視</button>
+      <button class="cam-btn" data-cam="reset" title="重設相機位置">🔄 重置</button>
+    </div>
+
+    <!-- Bottom Action Toolbar -->
+    <footer class="bottom-bar">
+      <!-- Remaining Tiles Info -->
+      <div class="tiles-info-badge glass-card">
+        <span class="info-label">剩餘方塊</span>
+        <span id="remaining-tiles-count" class="info-count">0</span>
+        <span class="divider">/</span>
+        <span id="target-2048-status" class="target-status">目標: 合併至 2048 消除</span>
+      </div>
+
+      <!-- Action Power-up Buttons -->
+      <div class="action-buttons">
+        <button id="undo-btn" class="action-btn" title="回復上一步操作">
+          <span class="btn-emoji">↩️</span>
+          <span class="btn-text">上一步</span>
+          <span id="undo-count" class="badge">3</span>
+        </button>
+
+        <button id="hint-btn" class="action-btn" title="提示一對可選相同方塊">
+          <span class="btn-emoji">💡</span>
+          <span class="btn-text">提示</span>
+          <span id="hint-count" class="badge">3</span>
+        </button>
+
+        <button id="shuffle-btn" class="action-btn" title="保持形狀隨機打亂數字">
+          <span class="btn-emoji">🔀</span>
+          <span class="btn-text">洗牌</span>
+          <span id="shuffle-count" class="badge">2</span>
+        </button>
+
+        <button id="restart-btn" class="action-btn secondary" title="重新挑戰本關">
+          <span class="btn-emoji">🔄</span>
+          <span class="btn-text">重新開始</span>
+        </button>
+      </div>
+    </footer>
+  </div>
+
+  <!-- Level Select Modal -->
+  <div id="level-modal" class="modal-overlay hidden">
+    <div class="modal-card glass-modal">
+      <div class="modal-header">
+        <h2>選擇關卡挑戰</h2>
+        <button id="close-level-modal" class="close-btn">✕</button>
+      </div>
+      <div class="levels-grid" id="levels-list">
+        <!-- Generated Dynamically by JS -->
+      </div>
+    </div>
+  </div>
+
+  <!-- Help / Tutorial Modal -->
+  <div id="help-modal" class="modal-overlay hidden">
+    <div class="modal-card glass-modal">
+      <div class="modal-header">
+        <h2>遊戲玩法與規則指引</h2>
+        <button id="close-help-modal" class="close-btn">✕</button>
+      </div>
+      <div class="help-content">
+        <div class="help-section">
+          <h3>🎮 基本操作</h3>
+          <p>• <strong>旋轉視角</strong>：在背景按住滑鼠左鍵（或單指觸控）拖曳可 360 度旋轉。</p>
+          <p>• <strong>縮放視野</strong>：滑鼠滾輪或雙指捏合縮放。</p>
+          <p>• <strong>平移鏡頭</strong>：滑鼠右鍵拖曳或雙指平移。</p>
+        </div>
+        <div class="help-section">
+          <h3>🀄 遮蔽判定規則</h3>
+          <p>• <strong>頂部判定</strong>：正上方若壓著其他方塊，即被<strong>遮蔽 (灰色鎖定)</strong>，無法點選。</p>
+          <p>• <strong>自由度模式</strong>：
+            <br>🍃 <strong>直覺休閒</strong>：只要頂部完全無遮蔽即可自由選取。
+            <br>🀄 <strong>立體麻將</strong>：頂部無遮蔽，且水平四個方向中至少有左右或前後邊緣空出，才算自由方塊。
+          </p>
+        </div>
+        <div class="help-section">
+          <h3>⚡ 合併、重力與 2048</h3>
+          <p>• 點選第一個方塊（發光浮起），再點選第二個相同數字方塊即可合併升級（如 4+4=8）。</p>
+          <p>• <strong>重力連鎖</strong>：下方方塊消失後，原本壓在上方的方塊會受重力垂直下墜，自動解鎖底層方塊！</p>
+          <p>• <strong>終極 2048</strong>：方塊合併達到 <strong>2048</strong> 時，會引發全屏光爆並徹底消除，獲得巨額分數！</p>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button id="help-confirm-btn" class="primary-btn">知道了，開始挑戰！</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Victory Modal -->
+  <div id="victory-modal" class="modal-overlay hidden">
+    <div class="modal-card glass-modal victory-card">
+      <div class="trophy-icon">🏆</div>
+      <h2 id="victory-title">關卡大通關！</h2>
+      <p id="victory-subtitle" class="victory-sub">你成功清空了所有立體方塊！</p>
+      
+      <div class="victory-stats">
+        <div class="victory-stat-item">
+          <span class="v-label">本關得分</span>
+          <span id="v-score" class="v-val">0</span>
+        </div>
+        <div class="victory-stat-item">
+          <span class="v-label">最大合成方塊</span>
+          <span id="v-max-tile" class="v-val">2048</span>
+        </div>
+        <div class="victory-stat-item">
+          <span class="v-label">總移動步數</span>
+          <span id="v-moves" class="v-val">0</span>
+        </div>
+      </div>
+
+      <div class="modal-actions">
+        <button id="v-replay-btn" class="action-btn secondary">再玩一次</button>
+        <button id="v-next-btn" class="action-btn primary highlight-glow">下一關 ➔</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Deadlock / No Moves Modal -->
+  <div id="deadlock-modal" class="modal-overlay hidden">
+    <div class="modal-card glass-modal deadlock-card">
+      <div class="deadlock-icon">⚠️</div>
+      <h2>無路可走 (No More Moves)</h2>
+      <p>目前所有可選的方塊中，找不到任何相同數字配對了！</p>
+      <div class="deadlock-tip">使用道具來化解危機吧：</div>
+      <div class="deadlock-actions">
+        <button id="deadlock-undo-btn" class="action-btn">
+          <span>↩️ 上一步</span>
+        </button>
+        <button id="deadlock-shuffle-btn" class="action-btn primary highlight-glow">
+          <span>🔀 重新洗牌</span>
+        </button>
+        <button id="deadlock-restart-btn" class="action-btn secondary">
+          <span>🔄 重開本關</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 2048 Ultimate Celebration Splash -->
+  <div id="celebration-splash" class="celebration-splash hidden">
+    <div class="splash-box">
+      <div class="glow-sun"></div>
+      <h1 class="splash-title">2048 UNLOCKED!</h1>
+      <p class="splash-desc">傳奇金色方塊爆發消除！</p>
+    </div>
+  </div>
+
+  <!-- Scripts -->
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>

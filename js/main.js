@@ -199,6 +199,7 @@ class Mahjong2048Game {
       const card = document.createElement('div');
       card.className = `level-card ${idx === this.currentLevelIndex ? 'active' : ''}`;
       card.innerHTML = `
+        <div class="level-badge">STAGE ${lvl.id}</div>
         <div class="level-icon">${lvl.icon}</div>
         <div class="level-name">${lvl.name}</div>
         <div class="level-meta">${lvl.desc}</div>

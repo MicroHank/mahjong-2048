@@ -81,6 +81,14 @@ export class GameRenderer {
       opacity: 0.68
     });
 
+    this.sharedFrozenBodyMat = new THREE.MeshStandardMaterial({
+      color: 0x93c5fd,
+      roughness: 0.15,
+      metalness: 0.25,
+      transparent: true,
+      opacity: 0.92
+    });
+
     this.initThree();
     this.initLighting();
     this.initBoardEnvironment();
@@ -253,8 +261,8 @@ export class GameRenderer {
   /**
    * Generates or fetches dynamic canvas texture for top of tile
    */
-  getTileTopTexture(value, isSelectable) {
-    const key = `${value}_${isSelectable}`;
+  getTileTopTexture(value, isSelectable, isFrozen = false) {
+    const key = `${value}_${isSelectable}_${isFrozen}`;
     if (this.textureCache.has(key)) {
       return this.textureCache.get(key);
     }
@@ -266,68 +274,123 @@ export class GameRenderer {
 
     const config = TILE_COLORS[value] || { bg: "#ff5722", text: "#ffffff", border: "#e64a19" };
 
-    // Fill background
-    ctx.fillStyle = config.bg;
-    ctx.fillRect(0, 0, 512, 512);
-
-    // Inner beveled border
-    ctx.lineWidth = 24;
-    ctx.strokeStyle = config.border;
-    ctx.strokeRect(16, 16, 480, 480);
-
-    // Corner decorative accents (Mahjong aesthetic)
-    ctx.fillStyle = config.border;
-    const cornerSize = 40;
-    ctx.fillRect(20, 20, cornerSize, cornerSize);
-    ctx.fillRect(512 - 20 - cornerSize, 20, cornerSize, cornerSize);
-    ctx.fillRect(20, 512 - 20 - cornerSize, cornerSize, cornerSize);
-    ctx.fillRect(512 - 20 - cornerSize, 512 - 20 - cornerSize, cornerSize, cornerSize);
-
-    // Draw Value Number
-    ctx.fillStyle = config.text;
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    
-    const textStr = value.toString();
-    if (textStr.length === 1) {
-      ctx.font = '900 270px Outfit, sans-serif';
-    } else if (textStr.length === 2) {
-      ctx.font = '900 230px Outfit, sans-serif';
-    } else if (textStr.length === 3) {
-      ctx.font = '900 185px Outfit, sans-serif';
-    } else {
-      ctx.font = '900 150px Outfit, sans-serif';
-    }
-
-    // High contrast outline stroke around numbers
-    ctx.lineJoin = 'round';
-    if (config.text === '#ffffff') {
-      ctx.strokeStyle = 'rgba(0, 0, 0, 0.45)';
-      ctx.lineWidth = (textStr.length <= 2) ? 14 : 10;
-      ctx.strokeText(textStr, 256, 256);
-    } else {
-      ctx.strokeStyle = 'rgba(255, 255, 255, 0.9)';
-      ctx.lineWidth = 12;
-      ctx.strokeText(textStr, 256, 256);
-    }
-
-    // Main text fill with subtle drop shadow
-    ctx.shadowColor = 'rgba(0, 0, 0, 0.35)';
-    ctx.shadowBlur = 10;
-    ctx.shadowOffsetX = 2;
-    ctx.shadowOffsetY = 4;
-    ctx.fillText(textStr, 256, 256);
-    ctx.shadowColor = 'transparent';
-
-    // If blocked / inactive: overlay darker veil + padlock icon
-    if (!isSelectable) {
-      ctx.fillStyle = 'rgba(10, 14, 23, 0.65)';
+    if (isFrozen) {
+      // Ice crystal background gradient
+      const grad = ctx.createLinearGradient(0, 0, 512, 512);
+      grad.addColorStop(0, '#c7e6fc');
+      grad.addColorStop(0.5, '#7dd3fc');
+      grad.addColorStop(1, '#38bdf8');
+      ctx.fillStyle = grad;
       ctx.fillRect(0, 0, 512, 512);
 
-      // Draw subtle Lock symbol
-      ctx.font = '90px sans-serif';
-      ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
-      ctx.fillText("🔒", 256, 256);
+      // Frost white outer border
+      ctx.lineWidth = 26;
+      ctx.strokeStyle = '#ffffff';
+      ctx.strokeRect(16, 16, 480, 480);
+
+      // Inner icy cyan border
+      ctx.lineWidth = 8;
+      ctx.strokeStyle = 'rgba(14, 165, 233, 0.7)';
+      ctx.strokeRect(34, 34, 444, 444);
+
+      // Corner ice crystals
+      ctx.fillStyle = '#ffffff';
+      const cornerSize = 44;
+      ctx.fillRect(20, 20, cornerSize, cornerSize);
+      ctx.fillRect(512 - 20 - cornerSize, 20, cornerSize, cornerSize);
+      ctx.fillRect(20, 512 - 20 - cornerSize, cornerSize, cornerSize);
+      ctx.fillRect(512 - 20 - cornerSize, 512 - 20 - cornerSize, cornerSize, cornerSize);
+
+      // Frost crack lines
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.85)';
+      ctx.lineWidth = 5;
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.moveTo(60, 80); ctx.lineTo(190, 180); ctx.lineTo(140, 290);
+      ctx.moveTo(450, 90); ctx.lineTo(330, 210); ctx.lineTo(390, 340);
+      ctx.moveTo(110, 440); ctx.lineTo(240, 360); ctx.lineTo(370, 430);
+      ctx.stroke();
+
+      // Number in ice
+      const textStr = value.toString();
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      if (textStr.length === 1) ctx.font = '900 240px Outfit, sans-serif';
+      else if (textStr.length === 2) ctx.font = '900 200px Outfit, sans-serif';
+      else if (textStr.length === 3) ctx.font = '900 165px Outfit, sans-serif';
+      else ctx.font = '900 135px Outfit, sans-serif';
+
+      ctx.lineWidth = 14;
+      ctx.strokeStyle = '#ffffff';
+      ctx.strokeText(textStr, 256, 285);
+
+      ctx.fillStyle = '#0369a1';
+      ctx.fillText(textStr, 256, 285);
+
+      // Top Frost Crystal Emblem ❄️
+      ctx.font = 'bold 96px sans-serif';
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.95)';
+      ctx.shadowColor = 'rgba(14, 165, 233, 0.9)';
+      ctx.shadowBlur = 18;
+      ctx.fillText("❄️", 256, 125);
+      ctx.shadowColor = 'transparent';
+    } else {
+      // Normal Tile
+      ctx.fillStyle = config.bg;
+      ctx.fillRect(0, 0, 512, 512);
+
+      ctx.lineWidth = 24;
+      ctx.strokeStyle = config.border;
+      ctx.strokeRect(16, 16, 480, 480);
+
+      ctx.fillStyle = config.border;
+      const cornerSize = 40;
+      ctx.fillRect(20, 20, cornerSize, cornerSize);
+      ctx.fillRect(512 - 20 - cornerSize, 20, cornerSize, cornerSize);
+      ctx.fillRect(20, 512 - 20 - cornerSize, cornerSize, cornerSize);
+      ctx.fillRect(512 - 20 - cornerSize, 512 - 20 - cornerSize, cornerSize, cornerSize);
+
+      ctx.fillStyle = config.text;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      
+      const textStr = value.toString();
+      if (textStr.length === 1) {
+        ctx.font = '900 270px Outfit, sans-serif';
+      } else if (textStr.length === 2) {
+        ctx.font = '900 230px Outfit, sans-serif';
+      } else if (textStr.length === 3) {
+        ctx.font = '900 185px Outfit, sans-serif';
+      } else {
+        ctx.font = '900 150px Outfit, sans-serif';
+      }
+
+      ctx.lineJoin = 'round';
+      if (config.text === '#ffffff') {
+        ctx.strokeStyle = 'rgba(0, 0, 0, 0.45)';
+        ctx.lineWidth = (textStr.length <= 2) ? 14 : 10;
+        ctx.strokeText(textStr, 256, 256);
+      } else {
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.9)';
+        ctx.lineWidth = 12;
+        ctx.strokeText(textStr, 256, 256);
+      }
+
+      ctx.shadowColor = 'rgba(0, 0, 0, 0.35)';
+      ctx.shadowBlur = 10;
+      ctx.shadowOffsetX = 2;
+      ctx.shadowOffsetY = 4;
+      ctx.fillText(textStr, 256, 256);
+      ctx.shadowColor = 'transparent';
+
+      if (!isSelectable) {
+        ctx.fillStyle = 'rgba(10, 14, 23, 0.65)';
+        ctx.fillRect(0, 0, 512, 512);
+
+        ctx.font = '90px sans-serif';
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
+        ctx.fillText("🔒", 256, 256);
+      }
     }
 
     const texture = new THREE.CanvasTexture(canvas);
@@ -340,18 +403,18 @@ export class GameRenderer {
   /**
    * Cached Top Face Material
    */
-  getTopMaterial(value, isSelectable) {
-    const key = `${value}_${isSelectable}`;
+  getTopMaterial(value, isSelectable, isFrozen = false) {
+    const key = `${value}_${isSelectable}_${isFrozen}`;
     if (this.topMatCache.has(key)) {
       return this.topMatCache.get(key);
     }
-    const texture = this.getTileTopTexture(value, isSelectable);
+    const texture = this.getTileTopTexture(value, isSelectable, isFrozen);
     const topMat = new THREE.MeshStandardMaterial({
       map: texture,
-      roughness: 0.3,
-      metalness: 0.05,
-      transparent: !isSelectable,
-      opacity: isSelectable ? 1.0 : 0.75
+      roughness: isFrozen ? 0.15 : 0.3,
+      metalness: isFrozen ? 0.25 : 0.05,
+      transparent: isFrozen || !isSelectable,
+      opacity: isFrozen ? 0.95 : (isSelectable ? 1.0 : 0.75)
     });
     this.topMatCache.set(key, topMat);
     return topMat;
@@ -362,8 +425,16 @@ export class GameRenderer {
    */
   createTileMesh(tile) {
     const geo = this.tileBoxGeo;
-    const bodyMat = tile.isSelectable ? this.sharedSelectableBodyMat : this.sharedUnselectableBodyMat;
-    const topMat = this.getTopMaterial(tile.value, tile.isSelectable);
+    let bodyMat;
+    if (tile.isFrozen) {
+      bodyMat = this.sharedFrozenBodyMat;
+    } else if (tile.isSelectable) {
+      bodyMat = this.sharedSelectableBodyMat;
+    } else {
+      bodyMat = this.sharedUnselectableBodyMat;
+    }
+
+    const topMat = this.getTopMaterial(tile.value, tile.isSelectable, tile.isFrozen);
 
     // Materials array for BoxGeometry: [+X, -X, +Y, -Y, +Z, -Z]
     const materials = [
@@ -413,21 +484,31 @@ export class GameRenderer {
   }
 
   /**
-   * Update visual states (colors, textures, selection elevation, glows)
+   * Update visual states (colors, textures, selection elevation, glows, ice)
    */
   updateTileVisuals(tile) {
     const mesh = this.tileMeshes.get(tile.id);
     if (!mesh) return;
 
-    const isSel = tile.isSelectable;
-    const bodyMat = isSel ? this.sharedSelectableBodyMat : this.sharedUnselectableBodyMat;
-    const topMat = this.getTopMaterial(tile.value, isSel);
+    let bodyMat;
+    let topMat;
+
+    if (tile.isFrozen) {
+      bodyMat = this.sharedFrozenBodyMat;
+      topMat = this.getTopMaterial(tile.value, false, true);
+    } else if (tile.isSelectable) {
+      bodyMat = this.sharedSelectableBodyMat;
+      topMat = this.getTopMaterial(tile.value, true, false);
+    } else {
+      bodyMat = this.sharedUnselectableBodyMat;
+      topMat = this.getTopMaterial(tile.value, false, false);
+    }
 
     // Target Elevation
     const targetY = tile.y * 0.46 + 0.225 + (tile.isSelected ? 0.38 : 0);
     mesh.position.y = targetY;
 
-    if (tile.isSelected) {
+    if (tile.isSelected && !tile.isFrozen) {
       // Selected tile gets a dedicated cloned material set to display golden glow
       const selBodyMat = bodyMat.clone();
       const selTopMat = topMat.clone();
@@ -457,6 +538,53 @@ export class GameRenderer {
     }
 
     this.requestRender(40);
+  }
+
+  /**
+   * Animate Ice Shatter / Break Effect for defrosted tile
+   */
+  animateIceShatter(tile, onComplete) {
+    const mesh = this.tileMeshes.get(tile.id);
+    if (!mesh) {
+      if (onComplete) onComplete();
+      return;
+    }
+
+    const pos = mesh.position.clone();
+    const count = this.isMobile ? 18 : 28;
+    const iceColors = [0xffffff, 0xe0f2fe, 0xbae6fd, 0x38bdf8, 0x7dd3fc];
+
+    for (let i = 0; i < count; i++) {
+      const colorHex = iceColors[Math.floor(Math.random() * iceColors.length)];
+      const pObj = this.getPooledParticle(this.tetraGeo, colorHex);
+      const s = 0.8 + Math.random() * 0.8;
+      pObj.mesh.scale.set(s, s, s);
+      pObj.mesh.position.copy(pos);
+      pObj.mesh.position.y += 0.15;
+
+      // Burst upwards and outwards
+      const theta = Math.random() * Math.PI * 2;
+      const phi = Math.random() * Math.PI * 0.55;
+      const speed = 0.06 + Math.random() * 0.11;
+      const vx = Math.sin(phi) * Math.cos(theta) * speed;
+      const vy = Math.cos(phi) * speed + 0.05;
+      const vz = Math.sin(phi) * Math.sin(theta) * speed;
+
+      this.particles.push({
+        mesh: pObj.mesh,
+        mat: pObj.mat,
+        vx, vy, vz,
+        life: 1.0,
+        decay: 0.04 + Math.random() * 0.02
+      });
+    }
+
+    // Immediately update visuals to unfrozen state and bounce
+    this.updateTileVisuals(tile);
+    this.animatePop(mesh);
+
+    this.requestRender(50);
+    if (onComplete) onComplete();
   }
 
   /**

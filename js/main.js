@@ -359,6 +359,14 @@ class Mahjong2048Game {
       this.activeHintTiles = null;
     }
 
+    // Check if frozen
+    if (clickedTile.isFrozen) {
+      this.sound.playIceHit();
+      this.haptics.iceHit();
+      this.showBanner("❄️ 冰層封印中！請在相鄰處進行合併以破冰！", 1400);
+      return;
+    }
+
     // Check if selectable
     if (!clickedTile.isSelectable) {
       this.sound.playInvalid();
@@ -446,6 +454,20 @@ class Mahjong2048Game {
       // TileA is removed in 3D
       this.board.removeTile(tileA.id);
       tileB.value = newValue;
+
+      // Check and break adjacent ice
+      const defrosted = this.board.breakAdjacentIce(tileA, tileB);
+      if (defrosted.length > 0) {
+        defrosted.forEach(t => {
+          this.renderer.animateIceShatter(t);
+        });
+        this.sound.playIceShatter();
+        this.haptics.iceShatter();
+        const iceBonus = defrosted.length * 150;
+        this.score += iceBonus;
+        this.updateScoreUI(iceBonus);
+        this.showBanner(`❄️ 能量震裂！解封了 ${defrosted.length} 塊冰封石！+${iceBonus} 分`, 1800);
+      }
 
       const level = LEVELS[this.currentLevelIndex];
       const targetVal = level ? (level.targetValue || 2048) : 2048;
@@ -556,6 +578,7 @@ class Mahjong2048Game {
       y: t.y,
       z: t.z,
       value: t.value,
+      isFrozen: !!t.isFrozen,
       isSelected: false,
       isSelectable: false,
       mesh: null

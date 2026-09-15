@@ -16,18 +16,23 @@ export class BoardModel {
     this.updateSelectability();
   }
 
-  loadLevel(coords, numbers) {
+  loadLevel(coords, numbers, frozenIndices = []) {
     this.tiles = [];
     this.historyStack = [];
     this.nextTileId = 1;
 
     coords.forEach((c, idx) => {
+      const isFrozen = !!c.isFrozen || (Array.isArray(frozenIndices) 
+        ? frozenIndices.includes(idx)
+        : (frozenIndices instanceof Set ? frozenIndices.has(idx) : false));
+
       this.tiles.push({
         id: this.nextTileId++,
         x: c.x,
         y: c.y,
         z: c.z,
         value: numbers[idx] || 2,
+        isFrozen: isFrozen,
         isSelected: false,
         isSelectable: false,
         mesh: null
@@ -112,12 +117,36 @@ export class BoardModel {
 
   /**
    * Recompute isSelectable flag for all alive tiles
-   * Casual Mode: Unblocked from top is selectable
+   * Unblocked from top AND not frozen is selectable
    */
   updateSelectability() {
     this.tiles.forEach(tile => {
-      tile.isSelectable = !this.isTopBlocked(tile);
+      tile.isSelectable = !this.isTopBlocked(tile) && !tile.isFrozen;
     });
+  }
+
+  /**
+   * Break ice on frozen stones adjacent to merge positions posA and posB
+   * Returns array of defrosted tile objects
+   */
+  breakAdjacentIce(posA, posB, radius = 1.6) {
+    const defrosted = [];
+    this.tiles.forEach(tile => {
+      if (!tile.isFrozen) return;
+
+      const distA = Math.hypot(tile.x - posA.x, (tile.y - posA.y) * 1.1, tile.z - posA.z);
+      const distB = Math.hypot(tile.x - posB.x, (tile.y - posB.y) * 1.1, tile.z - posB.z);
+
+      if (distA <= radius || distB <= radius) {
+        tile.isFrozen = false;
+        defrosted.push(tile);
+      }
+    });
+
+    if (defrosted.length > 0) {
+      this.updateSelectability();
+    }
+    return defrosted;
   }
 
   /**
@@ -131,7 +160,8 @@ export class BoardModel {
         x: t.x,
         y: t.y,
         z: t.z,
-        value: t.value
+        value: t.value,
+        isFrozen: !!t.isFrozen
       }))
     };
     this.historyStack.push(state);

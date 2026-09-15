@@ -45,9 +45,9 @@ export const LEVELS = [
       // Tier 2 (Peak): 1 tile
       coords.push({ x: 2.5, y: 2, z: 0 });
 
-      // === 中央連通石階 ===
-      coords.push({ x: -0.6, y: 0, z: 0 });
-      coords.push({ x: 0.6, y: 0, z: 0 });
+      // === 中央連通石階 (冰封教學石) ===
+      coords.push({ x: -0.6, y: 0, z: 0, isFrozen: true });
+      coords.push({ x: 0.6, y: 0, z: 0, isFrozen: true });
 
       return coords; // Total: 14 + 14 + 2 = 30 tiles
     }
@@ -88,11 +88,11 @@ export const LEVELS = [
       coords.push({ x: 0, y: 1, z: 0 });
       coords.push({ x: 1.2, y: 1, z: 0 });
       coords.push({ x: 0, y: 2, z: 0 });
-      // 地面護衛柱
-      coords.push({ x: -2.5, y: 0, z: -1.5 });
-      coords.push({ x: -2.5, y: 0, z: 1.5 });
-      coords.push({ x: 2.5, y: 0, z: -1.5 });
-      coords.push({ x: 2.5, y: 0, z: 1.5 });
+      // 地面護衛柱 (冰封守衛石)
+      coords.push({ x: -2.5, y: 0, z: -1.5, isFrozen: true });
+      coords.push({ x: -2.5, y: 0, z: 1.5, isFrozen: true });
+      coords.push({ x: 2.5, y: 0, z: -1.5, isFrozen: true });
+      coords.push({ x: 2.5, y: 0, z: 1.5, isFrozen: true });
 
       return coords; // Total: 14 + 14 + 8 = 36 tiles
     }
@@ -114,7 +114,7 @@ export const LEVELS = [
           }
         }
       }
-      coords.push({ x: -2.5, y: 2, z: 0 }); // Top gem: 1 tile
+      coords.push({ x: -2.5, y: 2, z: 0, isFrozen: true }); // Top frozen gem: 1 tile
 
       // === 右方體 (x: 1.5 to 3.5, y: 0 to 1, z: -1 to 1) 3x2x3 = 18 tiles ===
       for (let x = 1.5; x <= 3.5; x++) {
@@ -124,7 +124,7 @@ export const LEVELS = [
           }
         }
       }
-      coords.push({ x: 2.5, y: 2, z: 0 }); // Top gem: 1 tile
+      coords.push({ x: 2.5, y: 2, z: 0, isFrozen: true }); // Top frozen gem: 1 tile
 
       return coords; // Total: 19 + 19 = 38 tiles
     }
@@ -173,9 +173,9 @@ export const LEVELS = [
       coords.push({ x: 2.5, y: 1, z: 0 });
       coords.push({ x: 2.5, y: 2, z: 0 });
 
-      // === 中央城門橋 ===
-      coords.push({ x: -0.6, y: 0, z: 0 });
-      coords.push({ x: 0.6, y: 0, z: 0 });
+      // === 中央城門橋 (城衛冰封石) ===
+      coords.push({ x: -0.6, y: 0, z: 0, isFrozen: true });
+      coords.push({ x: 0.6, y: 0, z: 0, isFrozen: true });
 
       return coords; // Total: 15 + 15 + 2 = 32 tiles
     }
@@ -231,10 +231,10 @@ export const LEVELS = [
       ];
       rightSteps.forEach(s => coords.push(s)); // 4 + 12 = 16 tiles
 
-      // === 聖域中樞連接台 ===
-      coords.push({ x: -0.6, y: 0, z: 0 });
-      coords.push({ x: 0.6, y: 0, z: 0 });
-      coords.push({ x: 0, y: 1, z: 0 });
+      // === 聖域中樞連接台 (聖域封印石) ===
+      coords.push({ x: -0.6, y: 0, z: 0, isFrozen: true });
+      coords.push({ x: 0.6, y: 0, z: 0, isFrozen: true });
+      coords.push({ x: 0, y: 1, z: 0, isFrozen: true });
 
       return coords; // Total: 16 + 16 + 3 = 35 tiles
     }

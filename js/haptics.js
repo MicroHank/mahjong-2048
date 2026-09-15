@@ -78,6 +78,20 @@ export class HapticsEngine {
   }
 
   /**
+   * Tap on frozen ice stone
+   */
+  iceHit() {
+    this.vibrate(18);
+  }
+
+  /**
+   * Triple rapid crisp vibration for ice breaking
+   */
+  iceShatter() {
+    this.vibrate([15, 25, 20]);
+  }
+
+  /**
    * Level completion fanfare vibration
    */
   victory() {

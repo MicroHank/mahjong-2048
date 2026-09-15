@@ -305,4 +305,59 @@ export class SoundEngine {
       t += note.d * 0.85;
     });
   }
+
+  /**
+   * Ice Tap (Cold, solid crystalline clink)
+   */
+  playIceHit() {
+    if (this.isMuted || !this.ctx) return;
+    this.ensureAudio();
+
+    const now = this.ctx.currentTime;
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+
+    osc.type = "sine";
+    osc.frequency.setValueAtTime(1400, now);
+    osc.frequency.exponentialRampToValueAtTime(600, now + 0.08);
+
+    gain.gain.setValueAtTime(0.3, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.08);
+
+    osc.connect(gain);
+    gain.connect(this.ctx.destination);
+
+    osc.start(now);
+    osc.stop(now + 0.08);
+  }
+
+  /**
+   * Ice Shatter (Sparkling crystalline glass/ice fragmentation chime)
+   */
+  playIceShatter() {
+    if (this.isMuted || !this.ctx) return;
+    this.ensureAudio();
+
+    const now = this.ctx.currentTime;
+    const shards = [1980, 2640, 3520, 4400, 5280];
+
+    shards.forEach((freq, idx) => {
+      const osc = this.ctx.createOscillator();
+      const gain = this.ctx.createGain();
+      const startTime = now + idx * 0.022;
+
+      osc.type = (idx % 2 === 0) ? "sine" : "triangle";
+      osc.frequency.setValueAtTime(freq, startTime);
+      osc.frequency.exponentialRampToValueAtTime(freq * 0.7, startTime + 0.22);
+
+      gain.gain.setValueAtTime(0.22, startTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, startTime + 0.22);
+
+      osc.connect(gain);
+      gain.connect(this.ctx.destination);
+
+      osc.start(startTime);
+      osc.stop(startTime + 0.22);
+    });
+  }
 }

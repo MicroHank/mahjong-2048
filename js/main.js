@@ -371,6 +371,7 @@ class Mahjong2048Game {
     if (!clickedTile.isSelectable) {
       this.sound.playInvalid();
       this.haptics.warning();
+      this.renderer.animateShake(clickedTile);
       this.showBanner("⚠️ 正上方被壓著，無法選取！", 1200);
       return;
     }
@@ -400,34 +401,27 @@ class Mahjong2048Game {
     const tileB = clickedTile;
 
     if (tileA.value === tileB.value) {
-      // 1. Same-elevation Line-of-Sight check:
-      // If both tiles are on the same height level, direct path must NOT be obstructed by higher tiles
-      if (Math.abs(tileA.y - tileB.y) < 0.4) {
-        const blocker = this.board.isPathBlockedByHigherTiles(tileA, tileB);
-        if (blocker) {
-          this.sound.playRouteBlocked();
-          this.haptics.wallBlocked();
-          this.renderer.animateBlockedRoute(tileA, tileB, blocker);
-          this.showBanner("⚠️ 航線受阻！中間有高層方塊阻擋，請先削平高處障礙！", 2000);
-          return;
+      // 1. Full 3D Line-of-Sight & Ridge Obstruction Check:
+      // Direct path must NOT be obstructed by intermediate tiles or peaks in 3D space
+      const blockResult = this.board.isPathBlocked3D(tileA, tileB);
+      if (blockResult) {
+        this.sound.playRouteBlocked();
+        this.haptics.wallBlocked();
+        const blockerTile = blockResult.blocker || blockResult;
+        this.renderer.animateBlockedRoute(tileA, tileB, blockerTile);
+        if (blockResult.type === 'MAX_LEAP_EXCEEDED') {
+          this.showBanner(`⚠️ 平層飛越受限！中間跨越了 ${blockResult.count} 塊（最多只允許跨過 ${blockResult.max} 塊）！`, 2200);
+        } else {
+          this.showBanner("⚠️ 航線受阻！中間有高層方塊擋住飛行通道，請先打通走廊！", 2000);
         }
+        return;
       }
 
-      // 2. Elevation Flow Rule: Higher tile flies down into lower tile
-      let sourceTile, targetTile;
-      if (tileA.y > tileB.y) {
-        // Tile A is higher -> drops down to B
-        sourceTile = tileA;
-        targetTile = tileB;
-      } else if (tileB.y > tileA.y) {
-        // Tile B is higher -> drops down to A
-        sourceTile = tileB;
-        targetTile = tileA;
-      } else {
-        // Same height -> First selected flies to second selected
-        sourceTile = tileA;
-        targetTile = tileB;
-      }
+      // 2. Free Elevation Merge Flow (Player-Directed):
+      // First selected tile (tileA) flies into second selected target tile (tileB).
+      // Allows lower tiles to fly up into higher tiles, or higher to drop into lower!
+      const sourceTile = tileA;
+      const targetTile = tileB;
 
       // MATCH! Execute Merge
       this.executeMerge(sourceTile, targetTile);

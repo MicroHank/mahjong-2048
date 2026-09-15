@@ -1,6 +1,27 @@
 /**
  * 3D Mahjong 2048 Game Board Model
  */
+
+/**
+ * 遊戲平衡規則參數配置 (Game Rule Configuration)
+ * 您可以在此隨意修改各項飛越與消除限制條件！
+ */
+export const GAME_RULES = {
+  /**
+   * 平層飛越最多可跨過的中間方塊數量限制：
+   * 當兩塊方塊在同一高度層（平層，|yA - yB| < 0.4）嘗試合併時，
+   * 航線路徑中間跨過（遮擋/橫亙）的中間方塊總數如果「大於」此數值，就判定無法平層飛越！
+   * 預設為 1：代表中間最多只能跨過 1 塊，跨過 2 塊或以上就無法飛越！
+   * （若想禁止任何平層跨越，可設為 0；若想放寬，可設為 2 或更高）
+   */
+  MAX_SAME_LAYER_LEAP_TILES: 1,
+};
+
+// 掛載至 window 便於在瀏覽器 Console 中即時除錯與熱修改
+if (typeof window !== 'undefined') {
+  window.GAME_RULES = GAME_RULES;
+}
+
 /**
  * Compute the shortest distance from 2D point (px, pz) to line segment (x1, z1) -> (x2, z2)
  */
@@ -214,34 +235,84 @@ export class BoardModel {
   }
 
   /**
-   * Check if direct path between two tiles at the same elevation is blocked by higher tiles (y > tile.y)
-   * Returns the blocking tile object if blocked, or null if clear.
+   * Check if trajectory path between tileA and tileB is obstructed.
+   * 1. Flat Layer Leap (Same Elevation, |yA - yB| < 0.4):
+   *    - Counts intermediate tiles crossed along the flight corridor.
+   *    - If crossed count > GAME_RULES.MAX_SAME_LAYER_LEAP_TILES, flat leap is blocked!
+   *    - Also blocked if any intermediate obstacle is strictly higher than the layer (mountain peak).
+   * 2. Multi-Elevation Leap (Different Elevation):
+   *    - Unobstructed along high parabolic arc unless an intermediate peak higher than both tiles stands in between.
+   * 
+   * Returns obstruction object { type, blocker, count, max } if blocked, or null if clear.
    */
-  isPathBlockedByHigherTiles(tileA, tileB) {
-    if (Math.abs(tileA.y - tileB.y) > 0.4) {
-      return null; // Different heights: handled by top-to-bottom gravity flow
-    }
+  isPathBlocked3D(tileA, tileB) {
+    const dx = tileB.x - tileA.x;
+    const dz = tileB.z - tileA.z;
+    const lenSq2D = dx * dx + dz * dz;
 
-    const elevation = Math.min(tileA.y, tileB.y);
-    let closestBlocker = null;
-    let minDistance = Infinity;
+    // Immediately adjacent tiles or same horizontal spot are never blocked
+    if (lenSq2D < 0.64) return null;
+
+    const isSameLayer = Math.abs(tileA.y - tileB.y) < 0.4;
+    const maxElev = Math.max(tileA.y, tileB.y);
+
+    const intermediateFlatTiles = [];
+    let higherPeakBlocker = null;
 
     for (const t of this.tiles) {
       if (t.id === tileA.id || t.id === tileB.id) continue;
-      // Must be at a higher level than the candidate tiles
-      if (t.y <= elevation + 0.4) continue;
 
-      const dist = distPointToSegment(t.x, t.z, tileA.x, tileA.z, tileB.x, tileB.z);
-      // Half-width collision envelope (0.52 corresponds to overlapping tile bounds)
-      if (dist < 0.52) {
-        if (dist < minDistance) {
-          minDistance = dist;
-          closestBlocker = t;
+      // Project onto 2D flight segment (middle 15% ~ 85%)
+      const t2D = ((t.x - tileA.x) * dx + (t.z - tileA.z) * dz) / lenSq2D;
+      if (t2D < 0.15 || t2D > 0.85) continue;
+
+      const projX = tileA.x + t2D * dx;
+      const projZ = tileA.z + t2D * dz;
+      const dist2D = Math.hypot(t.x - projX, t.z - projZ);
+
+      // Falls within flight corridor width
+      if (dist2D < 0.48) {
+        // Condition 1: Intermediate tile is strictly higher than both endpoints
+        if (t.y > maxElev) {
+          higherPeakBlocker = t;
+        }
+
+        // Condition 2: Intermediate tile on the flat flight path (at or above this elevation)
+        if (isSameLayer && t.y >= tileA.y - 0.3) {
+          intermediateFlatTiles.push(t);
         }
       }
     }
 
-    return closestBlocker;
+    // Rule A: Peak obstruction (applies to both flat and multi-elevation leaps)
+    if (higherPeakBlocker) {
+      return {
+        type: 'PEAK_OBSTRUCTION',
+        blocker: higherPeakBlocker
+      };
+    }
+
+    // Rule B: Flat leap count limit (applies when on the same height level)
+    if (isSameLayer) {
+      const crossedCount = intermediateFlatTiles.length;
+      if (crossedCount > GAME_RULES.MAX_SAME_LAYER_LEAP_TILES) {
+        return {
+          type: 'MAX_LEAP_EXCEEDED',
+          blocker: intermediateFlatTiles[0],
+          count: crossedCount,
+          max: GAME_RULES.MAX_SAME_LAYER_LEAP_TILES
+        };
+      }
+    }
+
+    return null;
+  }
+
+  /**
+   * Backward-compatible alias
+   */
+  isPathBlockedByHigherTiles(tileA, tileB) {
+    return this.isPathBlocked3D(tileA, tileB);
   }
 
   /**
@@ -254,11 +325,9 @@ export class BoardModel {
     for (let i = 0; i < selectable.length; i++) {
       for (let j = i + 1; j < selectable.length; j++) {
         if (selectable[i].value === selectable[j].value) {
-          // If on same elevation level, verify line of sight is not blocked by higher tiles
-          if (Math.abs(selectable[i].y - selectable[j].y) < 0.4) {
-            if (this.isPathBlockedByHigherTiles(selectable[i], selectable[j])) {
-              continue; // Blocked by higher ridge / mountain!
-            }
+          // Verify 3D line of sight is clear
+          if (this.isPathBlocked3D(selectable[i], selectable[j])) {
+            continue; // Path blocked by 3D ridge or obstacle!
           }
           pairs.push([selectable[i], selectable[j]]);
         }

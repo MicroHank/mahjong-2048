@@ -2,6 +2,7 @@
   "name": "game_mahjong-2048",
   "version": "1.0.0",
   "description": "3D Mahjong Solitaire + 2048 Merging Game with Gravity Mechanics",
+  "type": "module",
   "main": "server.js",
   "scripts": {
     "dev": "node server.js",

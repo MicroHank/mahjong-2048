@@ -570,7 +570,10 @@ export class GameRenderer {
   animateBlockedRoute(tileA, tileB, blockerTile, onComplete) {
     const meshA = this.tileMeshes.get(tileA.id);
     const meshB = this.tileMeshes.get(tileB.id);
-    const blockerMesh = blockerTile ? this.tileMeshes.get(blockerTile.id) : null;
+    const actualBlocker = (blockerTile && blockerTile.id) 
+      ? blockerTile 
+      : (blockerTile && blockerTile.blocker ? blockerTile.blocker : null);
+    const blockerMesh = actualBlocker ? this.tileMeshes.get(actualBlocker.id) : null;
 
     if (!meshA || !meshB) {
       if (onComplete) onComplete();
@@ -645,13 +648,13 @@ export class GameRenderer {
       const redMat = (blockerMesh.material[0] || this.sharedSelectableBodyMat).clone();
       redMat.emissive = new THREE.Color(0xff1744);
       redMat.emissiveIntensity = 0.9;
-      const redTopMat = (blockerMesh.material[2] || this.getTopMaterial(blockerTile.value, true)).clone();
+      const redTopMat = (blockerMesh.material[2] || this.getTopMaterial(actualBlocker.value, true)).clone();
       redTopMat.emissive = new THREE.Color(0xff1744);
       redTopMat.emissiveIntensity = 0.8;
       blockerMesh.material = [redMat, redMat, redTopMat, redMat, redMat, redMat];
 
-      if (blockerTile) {
-        this.animateShake(blockerTile);
+      if (actualBlocker) {
+        this.animateShake(actualBlocker);
       }
     }
 

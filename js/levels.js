@@ -527,371 +527,339 @@ export const LEVELS = [
     }
   },
 
-  // --- 13. 雙王冠 ---
+  // --- 13. 三王冠 ---
   {
     id: 13,
-    name: "雙王冠",
-    desc: "呈多角形起伏的王冠造型，外圍邊緣高低錯落。",
+    name: "三王冠",
+    desc: "左、中、右三頂獨立立體王冠，可自由跨越鄰近王冠進行多路徑合併。",
     icon: "👑",
     targetValue: 2048,
     targetScore: 52000,
     generateGrid: () => {
       const coords = [];
-      // 左王冠 (Center x = -2.5)
-      const oct = [
-        [-3.5, -1], [-2.5, -1.5], [-1.5, -1],
-        [-3.5, 0], [-1.5, 0],
-        [-3.5, 1], [-2.5, 1.5], [-1.5, 1]
-      ];
-      oct.forEach(([cx, cz]) => coords.push({ x: cx, y: 0, z: cz }));
-      coords.push({ x: -3.5, y: 1, z: -1 });
-      coords.push({ x: -1.5, y: 1, z: -1 });
-      coords.push({ x: -3.5, y: 1, z: 1 });
-      coords.push({ x: -1.5, y: 1, z: 1 });
-      coords.push({ x: -2.5, y: 1, z: 0 });
-      coords.push({ x: -2.5, y: 2, z: 0, isFrozen: true });
-
-      // 右王冠 (Center x = 2.5)
-      const rOct = [
-        [1.5, -1], [2.5, -1.5], [3.5, -1],
-        [1.5, 0], [3.5, 0],
-        [1.5, 1], [2.5, 1.5], [3.5, 1]
-      ];
-      rOct.forEach(([cx, cz]) => coords.push({ x: cx, y: 0, z: cz }));
-      coords.push({ x: 1.5, y: 1, z: -1 });
-      coords.push({ x: 3.5, y: 1, z: -1 });
-      coords.push({ x: 1.5, y: 1, z: 1 });
-      coords.push({ x: 3.5, y: 1, z: 1 });
-      coords.push({ x: 2.5, y: 1, z: 0 });
-      coords.push({ x: 2.5, y: 2, z: 0, isFrozen: true });
-
-      // 權杖雙鎖
-      coords.push({ x: -0.6, y: 0, z: 0 });
-      coords.push({ x: 0.6, y: 0, z: 0 });
-      return coords; // 32 tiles
+      const crownCenters = [-3.2, 0, 3.2];
+      crownCenters.forEach(cx => {
+        const base = [
+          [-0.9, -0.7], [0.9, -0.7], [-0.9, 0.7], [0.9, 0.7], [0, -1.0], [0, 1.0]
+        ];
+        base.forEach(([dx, dz]) => coords.push({ x: cx + dx, y: 0, z: dz }));
+        coords.push({ x: cx - 0.5, y: 1, z: 0 });
+        coords.push({ x: cx + 0.5, y: 1, z: 0 });
+        coords.push({ x: cx, y: 1, z: 0 });
+        coords.push({ x: cx, y: 2, z: 0 });
+      });
+      coords.push({ x: -1.6, y: 0, z: 0, isFrozen: true });
+      coords.push({ x: 1.6, y: 0, z: 0, isFrozen: true });
+      return coords; // 32 tiles (3 heaps)
     }
   },
 
-    // --- 14. 對稱方陣 ---
+  // --- 14. 四角軍陣 ---
   {
     id: 14,
-    name: "對稱方陣",
-    desc: "密集排列的多層方陣，方塊數量多且底座緊湊。",
+    name: "四角軍陣",
+    desc: "分佈於四個象限的獨立方陣，支援相鄰與對角跨陣地自由飛躍。",
     icon: "⚔️",
     targetValue: 2048,
     targetScore: 55000,
     generateGrid: () => {
       const coords = [];
-      for (let x = -3.5; x <= -1.5; x += 1) {
-        for (let z = -1.5; z <= 1.5; z += 1) {
-          coords.push({ x, y: 0, z });
+      const corners = [
+        { cx: -2.5, cz: -1.5 },
+        { cx: 2.5, cz: -1.5 },
+        { cx: -2.5, cz: 1.5 },
+        { cx: 2.5, cz: 1.5 }
+      ];
+      corners.forEach(c => {
+        for (let x = -0.5; x <= 0.5; x++) {
+          for (let z = -1; z <= 1; z++) {
+            coords.push({ x: c.cx + x, y: 0, z: c.cz + z });
+          }
         }
-      }
-      coords.push({ x: -3, y: 1, z: -0.5 });
-      coords.push({ x: -3, y: 1, z: 0.5 });
-      coords.push({ x: -2, y: 1, z: -0.5 });
-      coords.push({ x: -2, y: 1, z: 0.5 });
-      coords.push({ x: -2.5, y: 2, z: 0 });
-
-      for (let x = 1.5; x <= 3.5; x += 1) {
-        for (let z = -1.5; z <= 1.5; z += 1) {
-          coords.push({ x, y: 0, z });
-        }
-      }
-      coords.push({ x: 2, y: 1, z: -0.5 });
-      coords.push({ x: 2, y: 1, z: 0.5 });
-      coords.push({ x: 3, y: 1, z: -0.5 });
-      coords.push({ x: 3, y: 1, z: 0.5 });
-      coords.push({ x: 2.5, y: 2, z: 0 });
-
-      // 連通步階與戰鼓衛石
-      coords.push({ x: 0, y: 0, z: -1.5 });
-      coords.push({ x: 0, y: 0, z: -0.5, isFrozen: true });
-      coords.push({ x: 0, y: 0, z: 0.5, isFrozen: true });
-      coords.push({ x: 0, y: 0, z: 1.5 });
-      return coords; // 38 tiles
+        coords.push({ x: c.cx, y: 1, z: c.cz - 0.5 });
+        coords.push({ x: c.cx, y: 1, z: c.cz + 0.5 });
+      }); // 4 * 8 = 32 tiles
+      coords.push({ x: -0.8, y: 0, z: 0 });
+      coords.push({ x: 0.8, y: 0, z: 0 });
+      coords.push({ x: 0, y: 0, z: -0.8, isFrozen: true });
+      coords.push({ x: 0, y: 0, z: 0.8, isFrozen: true });
+      coords.push({ x: 0, y: 1, z: 0 });
+      coords.push({ x: 0, y: 0, z: 0 });
+      return coords; // 38 tiles (4 heaps + center)
     }
   },
 
-    // --- 15. 展開雙翼 ---
+  // --- 15. 展開雙翼 ---
   {
     id: 15,
     name: "展開雙翼",
-    desc: "左右向外展開的翼狀造型，外側梯級逐層抬升。",
+    desc: "由左右飛翼與中央核心平台構成，方塊可由兩側向中央或外緣對稱聚合。",
     icon: "🪽",
     targetValue: 2048,
     targetScore: 58000,
     generateGrid: () => {
       const coords = [];
-      coords.push({ x: -1.5, y: 0, z: -1 });
-      coords.push({ x: -1.5, y: 0, z: 0 });
-      coords.push({ x: -1.5, y: 0, z: 1 });
-      coords.push({ x: -2.5, y: 0, z: -1.5 });
-      coords.push({ x: -2.5, y: 1, z: -0.5 });
-      coords.push({ x: -2.5, y: 1, z: 0.5 });
-      coords.push({ x: -2.5, y: 2, z: 0 });
-      coords.push({ x: -2.5, y: 0, z: 1.5 });
-      coords.push({ x: -3.5, y: 1, z: -1 });
-      coords.push({ x: -3.5, y: 2, z: 0 });
-      coords.push({ x: -3.5, y: 3, z: 0 });
-      coords.push({ x: -3.5, y: 1, z: 1 });
-      coords.push({ x: -2.5, y: 0, z: 0, isFrozen: true });
+      // Left Wing
+      coords.push({ x: -1.8, y: 0, z: -1 });
+      coords.push({ x: -1.8, y: 0, z: 0 });
+      coords.push({ x: -1.8, y: 0, z: 1 });
+      coords.push({ x: -2.8, y: 0, z: -1.5 });
+      coords.push({ x: -2.8, y: 1, z: -0.5 });
+      coords.push({ x: -2.8, y: 1, z: 0.5 });
+      coords.push({ x: -2.8, y: 2, z: 0 });
+      coords.push({ x: -2.8, y: 0, z: 1.5 });
+      coords.push({ x: -3.8, y: 1, z: -1 });
+      coords.push({ x: -3.8, y: 2, z: 0 });
+      coords.push({ x: -3.8, y: 3, z: 0 });
+      coords.push({ x: -3.8, y: 1, z: 1 });
 
-      coords.push({ x: 1.5, y: 0, z: -1 });
-      coords.push({ x: 1.5, y: 0, z: 0 });
-      coords.push({ x: 1.5, y: 0, z: 1 });
-      coords.push({ x: 2.5, y: 0, z: -1.5 });
-      coords.push({ x: 2.5, y: 1, z: -0.5 });
-      coords.push({ x: 2.5, y: 1, z: 0.5 });
-      coords.push({ x: 2.5, y: 2, z: 0 });
-      coords.push({ x: 2.5, y: 0, z: 1.5 });
-      coords.push({ x: 3.5, y: 1, z: -1 });
-      coords.push({ x: 3.5, y: 2, z: 0 });
-      coords.push({ x: 3.5, y: 3, z: 0 });
-      coords.push({ x: 3.5, y: 1, z: 1 });
-      coords.push({ x: 2.5, y: 0, z: 0, isFrozen: true });
+      // Right Wing
+      coords.push({ x: 1.8, y: 0, z: -1 });
+      coords.push({ x: 1.8, y: 0, z: 0 });
+      coords.push({ x: 1.8, y: 0, z: 1 });
+      coords.push({ x: 2.8, y: 0, z: -1.5 });
+      coords.push({ x: 2.8, y: 1, z: -0.5 });
+      coords.push({ x: 2.8, y: 1, z: 0.5 });
+      coords.push({ x: 2.8, y: 2, z: 0 });
+      coords.push({ x: 2.8, y: 0, z: 1.5 });
+      coords.push({ x: 3.8, y: 1, z: -1 });
+      coords.push({ x: 3.8, y: 2, z: 0 });
+      coords.push({ x: 3.8, y: 3, z: 0 });
+      coords.push({ x: 3.8, y: 1, z: 1 });
 
-      // 鳳凰涅槃心核
-      coords.push({ x: 0, y: 0, z: -1 });
+      // Central Platform (3rd Heap)
+      coords.push({ x: -0.6, y: 0, z: -0.8 });
+      coords.push({ x: 0.6, y: 0, z: -0.8 });
+      coords.push({ x: -0.6, y: 0, z: 0.8 });
+      coords.push({ x: 0.6, y: 0, z: 0.8 });
       coords.push({ x: 0, y: 0, z: 0 });
-      coords.push({ x: 0, y: 0, z: 1 });
+      coords.push({ x: 0, y: 1, z: -0.5 });
+      coords.push({ x: 0, y: 1, z: 0.5 });
+      coords.push({ x: 0, y: 2, z: 0 });
       coords.push({ x: 0, y: 1, z: 0, isFrozen: true });
-      return coords; // 30 tiles
+      return coords; // 33 tiles (3 heaps)
     }
   },
 
-  // --- 16. 環形石柱 ---
+  // --- 16. 四方巨石柱 ---
   {
     id: 16,
-    name: "環形石柱",
-    desc: "立柱與橫梁交錯的環形結構，需先清除外側通道。",
+    name: "四方巨石柱",
+    desc: "分立於東南西北四個方位的獨立石門群，環繞中央石環展開四向推進。",
     icon: "🗿",
     targetValue: 2048,
     targetScore: 60000,
     generateGrid: () => {
       const coords = [];
-      coords.push({ x: -3.5, y: 0, z: -1 });
-      coords.push({ x: -3.5, y: 0, z: 1 });
-      coords.push({ x: -1.5, y: 0, z: -1 });
-      coords.push({ x: -1.5, y: 0, z: 1 });
-      coords.push({ x: -3.5, y: 1, z: 0 });
-      coords.push({ x: -1.5, y: 1, z: 0 });
-      coords.push({ x: -2.5, y: 1, z: -1 });
-      coords.push({ x: -2.5, y: 1, z: 1 });
-      coords.push({ x: -2.5, y: 0, z: 0 });
-      coords.push({ x: -2.5, y: 1, z: 0 });
-      coords.push({ x: -2.5, y: 2, z: 0 });
-      coords.push({ x: -3.5, y: 0, z: 0, isFrozen: true });
-
-      coords.push({ x: 1.5, y: 0, z: -1 });
-      coords.push({ x: 1.5, y: 0, z: 1 });
-      coords.push({ x: 3.5, y: 0, z: -1 });
-      coords.push({ x: 3.5, y: 0, z: 1 });
-      coords.push({ x: 1.5, y: 1, z: 0 });
-      coords.push({ x: 3.5, y: 1, z: 0 });
-      coords.push({ x: 2.5, y: 1, z: -1 });
-      coords.push({ x: 2.5, y: 1, z: 1 });
-      coords.push({ x: 2.5, y: 0, z: 0 });
-      coords.push({ x: 2.5, y: 1, z: 0 });
-      coords.push({ x: 2.5, y: 2, z: 0 });
-      coords.push({ x: 3.5, y: 0, z: 0, isFrozen: true });
-
-      coords.push({ x: 0, y: 0, z: -1 });
+      const monoliths = [
+        { cx: 0, cz: -2.6 },
+        { cx: 0, cz: 2.6 },
+        { cx: -2.8, cz: 0 },
+        { cx: 2.8, cz: 0 }
+      ];
+      monoliths.forEach(m => {
+        if (m.cx === 0) {
+          coords.push({ x: -0.6, y: 0, z: m.cz });
+          coords.push({ x: 0.6, y: 0, z: m.cz });
+          coords.push({ x: -0.6, y: 1, z: m.cz });
+          coords.push({ x: 0.6, y: 1, z: m.cz });
+          coords.push({ x: 0, y: 1, z: m.cz });
+          coords.push({ x: 0, y: 2, z: m.cz });
+        } else {
+          coords.push({ x: m.cx, y: 0, z: -0.6 });
+          coords.push({ x: m.cx, y: 0, z: 0.6 });
+          coords.push({ x: m.cx, y: 1, z: -0.6 });
+          coords.push({ x: m.cx, y: 1, z: 0.6 });
+          coords.push({ x: m.cx, y: 1, z: 0 });
+          coords.push({ x: m.cx, y: 2, z: 0 });
+        }
+      }); // 4 * 6 = 24
+      // Center stone ring
+      coords.push({ x: -0.6, y: 0, z: -0.6 });
+      coords.push({ x: 0.6, y: 0, z: -0.6 });
+      coords.push({ x: -0.6, y: 0, z: 0.6 });
+      coords.push({ x: 0.6, y: 0, z: 0.6 });
       coords.push({ x: 0, y: 0, z: 0 });
-      coords.push({ x: 0, y: 0, z: 1 });
       coords.push({ x: 0, y: 1, z: 0, isFrozen: true });
-      return coords; // 28 tiles
+      return coords; // 30 tiles (4 heaps + center)
     }
   },
 
-  // --- 17. 階梯大廈 ---
+  // --- 17. 四子天際樓 ---
   {
     id: 17,
-    name: "階梯大廈",
-    desc: "多層退縮的對稱大樓，具備多層露台與連廊結構。",
+    name: "四子天際樓",
+    desc: "矗立於四角的四棟階梯式高樓，具備多層露台並由中央天橋相互連通。",
     icon: "🏙️",
     targetValue: 2048,
     targetScore: 65000,
     generateGrid: () => {
       const coords = [];
-      for (let x = -3.5; x <= -1.5; x++) {
-        for (let z = -1; z <= 1; z++) {
-          coords.push({ x, y: 0, z });
+      const corners = [
+        { cx: -2.5, cz: -1.5 },
+        { cx: 2.5, cz: -1.5 },
+        { cx: -2.5, cz: 1.5 },
+        { cx: 2.5, cz: 1.5 }
+      ];
+      corners.forEach(c => {
+        for (let x = -0.5; x <= 0.5; x++) {
+          for (let z = -0.5; z <= 0.5; z++) {
+            coords.push({ x: c.cx + x, y: 0, z: c.cz + z });
+          }
         }
-      }
-      coords.push({ x: -3, y: 1, z: -0.5 });
-      coords.push({ x: -3, y: 1, z: 0.5 });
-      coords.push({ x: -2, y: 1, z: -0.5 });
-      coords.push({ x: -2, y: 1, z: 0.5 });
-      coords.push({ x: -2.5, y: 2, z: -0.5 });
-      coords.push({ x: -2.5, y: 2, z: 0.5 });
-      coords.push({ x: -2.5, y: 3, z: 0 });
-      coords.push({ x: -2.5, y: 1, z: 1.5, isFrozen: true });
-
-      for (let x = 1.5; x <= 3.5; x++) {
-        for (let z = -1; z <= 1; z++) {
-          coords.push({ x, y: 0, z });
-        }
-      }
-      coords.push({ x: 2, y: 1, z: -0.5 });
-      coords.push({ x: 2, y: 1, z: 0.5 });
-      coords.push({ x: 3, y: 1, z: -0.5 });
-      coords.push({ x: 3, y: 1, z: 0.5 });
-      coords.push({ x: 2.5, y: 2, z: -0.5 });
-      coords.push({ x: 2.5, y: 2, z: 0.5 });
-      coords.push({ x: 2.5, y: 3, z: 0 });
-      coords.push({ x: 2.5, y: 1, z: 1.5, isFrozen: true });
-
-      coords.push({ x: 0, y: 0, z: -1 });
+        coords.push({ x: c.cx - 0.5, y: 1, z: c.cz });
+        coords.push({ x: c.cx + 0.5, y: 1, z: c.cz });
+        coords.push({ x: c.cx, y: 2, z: c.cz });
+        coords.push({ x: c.cx, y: 3, z: c.cz });
+      }); // 4 * 8 = 32
+      // Central skywalk cross
+      coords.push({ x: -1.2, y: 0, z: 0 });
+      coords.push({ x: 1.2, y: 0, z: 0 });
+      coords.push({ x: 0, y: 0, z: -0.8 });
+      coords.push({ x: 0, y: 0, z: 0.8 });
       coords.push({ x: 0, y: 0, z: 0 });
-      coords.push({ x: 0, y: 0, z: 1 });
       coords.push({ x: 0, y: 1, z: 0, isFrozen: true });
-      return coords; // 38 tiles
+      return coords; // 38 tiles (4 heaps + skywalk)
     }
   },
 
-    // --- 18. 太極石陣 ---
+  // --- 18. 四象太極陣 ---
   {
     id: 18,
-    name: "太極石陣",
-    desc: "兩側呈曲線排列的對稱石陣，需兼顧兩端平衡推進。",
+    name: "四象太極陣",
+    desc: "四角象限各自盤踞獨立卦位石陣，環繞中央太極核心，可多向靈活破陣。",
     icon: "🪐",
     targetValue: 2048,
     targetScore: 70000,
     generateGrid: () => {
       const coords = [];
-      for (let z = -1.5; z <= 1.5; z++) {
-        coords.push({ x: -3.5, y: 0, z });
-        coords.push({ x: -2.5, y: 0, z, isFrozen: (z === -0.5) });
-        coords.push({ x: -1.5, y: 0, z });
-      }
-      coords.push({ x: -3, y: 1, z: -1 });
-      coords.push({ x: -3, y: 1, z: 0 });
-      coords.push({ x: -2, y: 1, z: 0 });
-      coords.push({ x: -2, y: 1, z: 1 });
-      coords.push({ x: -2.5, y: 2, z: -0.5 });
-      coords.push({ x: -2.5, y: 3, z: -0.5 });
-
-      for (let z = -1.5; z <= 1.5; z++) {
-        coords.push({ x: 1.5, y: 0, z });
-        coords.push({ x: 2.5, y: 0, z, isFrozen: (z === 0.5) });
-        coords.push({ x: 3.5, y: 0, z });
-      }
-      coords.push({ x: 2, y: 1, z: -1 });
-      coords.push({ x: 2, y: 1, z: 0 });
-      coords.push({ x: 3, y: 1, z: 0 });
-      coords.push({ x: 3, y: 1, z: 1 });
-      coords.push({ x: 2.5, y: 2, z: 0.5 });
-      coords.push({ x: 2.5, y: 3, z: 0.5 });
-
-      coords.push({ x: 0, y: 0, z: -1 });
+      const quadCorners = [
+        { cx: -2.5, cz: -1.4, sgnZ: -1 },
+        { cx: 2.5, cz: -1.4, sgnZ: -1 },
+        { cx: -2.5, cz: 1.4, sgnZ: 1 },
+        { cx: 2.5, cz: 1.4, sgnZ: 1 }
+      ];
+      quadCorners.forEach(q => {
+        coords.push({ x: q.cx - 0.5, y: 0, z: q.cz - 0.5 });
+        coords.push({ x: q.cx + 0.5, y: 0, z: q.cz - 0.5 });
+        coords.push({ x: q.cx + 0.5, y: 0, z: q.cz + 0.5 });
+        coords.push({ x: q.cx - 0.5, y: 0, z: q.cz + 0.5 });
+        coords.push({ x: q.cx, y: 1, z: q.cz - 0.3 * q.sgnZ });
+        coords.push({ x: q.cx, y: 1, z: q.cz + 0.3 * q.sgnZ });
+        coords.push({ x: q.cx, y: 2, z: q.cz });
+      }); // 4 * 7 = 28
+      // Central Taiji
+      coords.push({ x: -0.8, y: 0, z: 0 });
+      coords.push({ x: 0.8, y: 0, z: 0 });
+      coords.push({ x: 0, y: 0, z: -0.8 });
+      coords.push({ x: 0, y: 0, z: 0.8 });
       coords.push({ x: 0, y: 0, z: 0 });
-      coords.push({ x: 0, y: 0, z: 1 });
-      coords.push({ x: 0, y: 1, z: 0, isFrozen: true });
-      return coords; // 40 tiles
+      coords.push({ x: -0.4, y: 1, z: 0 });
+      coords.push({ x: 0.4, y: 1, z: 0, isFrozen: true });
+      coords.push({ x: 0, y: 2, z: 0 });
+      return coords; // 36 tiles (5 heaps)
     }
   },
 
-  // --- 19. 柱廊神殿 ---
+  // --- 19. 衛城三殿 ---
   {
     id: 19,
-    name: "柱廊神殿",
-    desc: "具備多根立柱與三角屋頂的古典殿堂，上方方塊較為集中。",
+    name: "衛城三殿",
+    desc: "左殿、右殿與中央主神殿三足鼎立，古典列柱與三角山牆錯落有致。",
     icon: "🏛️",
     targetValue: 2048,
     targetScore: 75000,
     generateGrid: () => {
       const coords = [];
-      // 左神殿 (Center x = -2.5)
-      for (let x = -3.5; x <= -1.5; x += 1) {
-        coords.push({ x, y: 0, z: -1 });
-        coords.push({ x, y: 0, z: 1 });
-      }
-      coords.push({ x: -2.5, y: 0, z: 0 });
-      for (let x = -3.5; x <= -1.5; x += 1) {
-        coords.push({ x, y: 1, z: -1 });
-        coords.push({ x, y: 1, z: 1 });
-      }
-      coords.push({ x: -2.5, y: 1, z: 0 });
-      coords.push({ x: -3, y: 2, z: 0 });
-      coords.push({ x: -2, y: 2, z: 0 });
-      coords.push({ x: -2.5, y: 3, z: 0 });
-      coords.push({ x: -3.5, y: 0, z: 0, isFrozen: true });
+      // Left Temple (cx = -3.2)
+      coords.push({ x: -3.8, y: 0, z: -1 });
+      coords.push({ x: -2.6, y: 0, z: -1 });
+      coords.push({ x: -3.8, y: 0, z: 1 });
+      coords.push({ x: -2.6, y: 0, z: 1 });
+      coords.push({ x: -3.2, y: 1, z: -0.6 });
+      coords.push({ x: -3.2, y: 1, z: 0.6 });
+      coords.push({ x: -3.2, y: 2, z: 0 });
 
-      // 右神殿 (Center x = 2.5)
-      for (let x = 1.5; x <= 3.5; x += 1) {
-        coords.push({ x, y: 0, z: -1 });
-        coords.push({ x, y: 0, z: 1 });
-      }
-      coords.push({ x: 2.5, y: 0, z: 0 });
-      for (let x = 1.5; x <= 3.5; x += 1) {
-        coords.push({ x, y: 1, z: -1 });
-        coords.push({ x, y: 1, z: 1 });
-      }
-      coords.push({ x: 2.5, y: 1, z: 0 });
-      coords.push({ x: 2, y: 2, z: 0 });
-      coords.push({ x: 3, y: 2, z: 0 });
-      coords.push({ x: 2.5, y: 3, z: 0 });
-      coords.push({ x: 3.5, y: 0, z: 0, isFrozen: true });
+      // Right Temple (cx = 3.2)
+      coords.push({ x: 2.6, y: 0, z: -1 });
+      coords.push({ x: 3.8, y: 0, z: -1 });
+      coords.push({ x: 2.6, y: 0, z: 1 });
+      coords.push({ x: 3.8, y: 0, z: 1 });
+      coords.push({ x: 3.2, y: 1, z: -0.6 });
+      coords.push({ x: 3.2, y: 1, z: 0.6 });
+      coords.push({ x: 3.2, y: 2, z: 0 });
 
-      // 眾神聖道
-      coords.push({ x: 0, y: 0, z: -1 });
-      coords.push({ x: 0, y: 0, z: 0 });
-      coords.push({ x: 0, y: 0, z: 1 });
-      coords.push({ x: 0, y: 1, z: 0, isFrozen: true });
-      return coords; // 40 tiles
+      // Central High Temple (cx = 0)
+      coords.push({ x: -1, y: 0, z: -1 });
+      coords.push({ x: 1, y: 0, z: -1 });
+      coords.push({ x: -1, y: 0, z: 0 });
+      coords.push({ x: 1, y: 0, z: 0 });
+      coords.push({ x: -1, y: 0, z: 1 });
+      coords.push({ x: 1, y: 0, z: 1 });
+      coords.push({ x: 0, y: 1, z: -0.8 });
+      coords.push({ x: 0, y: 1, z: 0.8 });
+      coords.push({ x: 0, y: 1, z: 0 });
+      coords.push({ x: 0, y: 2, z: 0 });
+
+      // Sacred processional walkway
+      coords.push({ x: -2, y: 0, z: 0 });
+      coords.push({ x: 2, y: 0, z: 0 });
+      coords.push({ x: -2, y: 0, z: -0.8, isFrozen: true });
+      coords.push({ x: 2, y: 0, z: 0.8, isFrozen: true });
+
+      return coords; // 28 tiles (3 heaps)
     }
   },
 
-    // --- 20. 雙體巡航船 ---
+  // --- 20. 四體巡航艦隊 ---
   {
     id: 20,
-    name: "雙體巡航船",
-    desc: "大型雙體船型造型，方塊總數最多，為全系列最終關卡。",
+    name: "四體巡航艦隊",
+    desc: "四艘巡航艦分列四方，環繞中央長程飛行甲板，提供多路徑的跨艦隊協同消除。",
     icon: "🚀",
     targetValue: 2048,
     targetScore: 88888,
     generateGrid: () => {
       const coords = [];
-      for (let x = -3.5; x <= -1.5; x++) {
-        for (let z = -1.5; z <= 1.5; z++) {
-          const isFz = (x === -2.5 && z === -1.5);
-          coords.push({ x, y: 0, z, ...(isFz ? { isFrozen: true } : {}) });
+      const hulls = [
+        { cx: -2.5, cz: -1.2 },
+        { cx: 2.5, cz: -1.2 },
+        { cx: -2.5, cz: 1.2 },
+        { cx: 2.5, cz: 1.2 }
+      ];
+      hulls.forEach(h => {
+        for (let x = h.cx - 0.5; x <= h.cx + 0.5; x++) {
+          for (let z = h.cz - 0.5; z <= h.cz + 0.5; z++) {
+            coords.push({ x, y: 0, z });
+          }
         }
-      }
-      for (let x = -3; x <= -2; x++) {
-        coords.push({ x, y: 1, z: -1 });
-        coords.push({ x, y: 1, z: 0 });
-      }
-      coords.push({ x: -2.5, y: 2, z: -0.5 });
-      coords.push({ x: -2.5, y: 3, z: -0.5 });
+        coords.push({ x: h.cx - 0.5, y: 1, z: h.cz });
+        coords.push({ x: h.cx + 0.5, y: 1, z: h.cz });
+        coords.push({ x: h.cx, y: 2, z: h.cz });
+      }); // 4 * 7 = 28 tiles
 
-      for (let x = 1.5; x <= 3.5; x++) {
-        for (let z = -1.5; z <= 1.5; z++) {
-          const isFz = (x === 2.5 && z === -1.5);
-          coords.push({ x, y: 0, z, ...(isFz ? { isFrozen: true } : {}) });
-        }
-      }
-      for (let x = 2; x <= 3; x++) {
-        coords.push({ x, y: 1, z: -1 });
-        coords.push({ x, y: 1, z: 0 });
-      }
-      coords.push({ x: 2.5, y: 2, z: -0.5 });
-      coords.push({ x: 2.5, y: 3, z: -0.5 });
+      // Central runway deck
+      for (let z = -1.5; z <= 1.5; z += 1) {
+        coords.push({ x: -0.5, y: 0, z });
+        coords.push({ x: 0.5, y: 0, z });
+      } // 8 tiles
+      coords.push({ x: 0, y: 1, z: -0.5 });
+      coords.push({ x: 0, y: 1, z: 0.5 }); // 2 tiles
 
-      coords.push({ x: 0, y: 0, z: -1 });
-      coords.push({ x: 0, y: 0, z: 0 });
-      coords.push({ x: 0, y: 0, z: 1 });
-      coords.push({ x: 0, y: 1, z: 0, isFrozen: true });
-      return coords; // 40 tiles
+      // Perimeter buoys (distance 1.0 from runway, easily defrosted!)
+      coords.push({ x: -1.5, y: 0, z: 0, isFrozen: true });
+      coords.push({ x: 1.5, y: 0, z: 0, isFrozen: true });
+
+      return coords; // 40 tiles (5 heaps: 4 hulls + central deck)
     }
   }
 ];
 
 /**
- * Smart Symmetric Pairing Binary Number Generator
- * Guarantees that binary merge trees are symmetrically distributed across wings,
- * ensuring levels are 100% winnable purely through player skill without requiring shuffle.
+ * Smart Multi-Heap Spatial Number Generator
+ * Uses spatial clustering to group tiles into K independent heaps,
+ * then symmetrically pairs numbers across complementary heaps from the top layer down.
+ * Guarantees multiple accessible merge paths and eliminates single-path deadlocks.
  */
 export function generateNumbersForGrid(coords, levelId = 1, targetValue = 2048) {
   const count = coords.length;
@@ -915,34 +883,50 @@ export function generateNumbersForGrid(coords, levelId = 1, targetValue = 2048) 
   }
   list.sort((a, b) => a - b);
 
-  // Group coordinates by left, right wings and center
-  const leftCoords = coords.filter(c => c.x < -0.3).sort((a, b) => {
-    if (b.y !== a.y) return b.y - a.y;
-    return Math.abs(b.x) - Math.abs(a.x);
+  // Cluster coordinates into spatial heaps based on (x, z)
+  const heaps = [];
+  coords.forEach((c, idx) => {
+    let assigned = false;
+    for (const h of heaps) {
+      const dist = Math.hypot(c.x - h.cx, c.z - h.cz);
+      if (dist < 1.75) {
+        h.tiles.push({ coord: c, idx });
+        h.cx = (h.cx * (h.tiles.length - 1) + c.x) / h.tiles.length;
+        h.cz = (h.cz * (h.tiles.length - 1) + c.z) / h.tiles.length;
+        assigned = true;
+        break;
+      }
+    }
+    if (!assigned) {
+      heaps.push({ cx: c.x, cz: c.z, tiles: [{ coord: c, idx }] });
+    }
   });
-  const rightCoords = coords.filter(c => c.x > 0.3).sort((a, b) => {
-    if (b.y !== a.y) return b.y - a.y;
-    return Math.abs(b.x) - Math.abs(a.x);
+
+  // Sort tiles in each heap from top (high Y) to bottom
+  heaps.forEach(h => {
+    h.tiles.sort((a, b) => b.coord.y - a.coord.y);
   });
-  const centerCoords = coords.filter(c => Math.abs(c.x) <= 0.3).sort((a, b) => b.y - a.y);
 
   const numbers = new Array(count);
   for (let i = 0; i < list.length; i += 2) {
     const valA = list[i];
     const valB = list[i + 1] || list[i];
 
-    if (leftCoords.length > 0 && rightCoords.length > 0) {
-      const cL = leftCoords.shift();
-      const cR = rightCoords.shift();
-      numbers[coords.indexOf(cL)] = valA;
-      numbers[coords.indexOf(cR)] = valB;
-    } else {
-      const remain = leftCoords.length > 0 ? leftCoords : (rightCoords.length > 0 ? rightCoords : centerCoords);
-      const c1 = remain.shift();
-      const c2 = remain.shift();
-      if (c1) numbers[coords.indexOf(c1)] = valA;
-      if (c2) numbers[coords.indexOf(c2)] = valB;
-    }
+    // Order heaps by highest remaining tile Y
+    heaps.sort((h1, h2) => {
+      const y1 = h1.tiles.length > 0 ? h1.tiles[0].coord.y : -1;
+      const y2 = h2.tiles.length > 0 ? h2.tiles[0].coord.y : -1;
+      return y2 - y1;
+    });
+
+    const hA = heaps.find(h => h.tiles.length > 0);
+    const tA = hA ? hA.tiles.shift() : null;
+
+    const hB = heaps.find(h => h !== hA && h.tiles.length > 0) || heaps.find(h => h.tiles.length > 0);
+    const tB = hB ? hB.tiles.shift() : null;
+
+    if (tA) numbers[tA.idx] = valA;
+    if (tB) numbers[tB.idx] = valB;
   }
 
   for (let i = 0; i < count; i++) {

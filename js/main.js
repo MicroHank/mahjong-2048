@@ -8,6 +8,7 @@ import { BoardModel } from './board.js';
 import { GameRenderer } from './renderer.js';
 import { SoundEngine } from './audio.js';
 import { InteractionHandler } from './interaction.js';
+import { HapticsEngine } from './haptics.js';
 
 class Mahjong2048Game {
   constructor() {
@@ -28,12 +29,14 @@ class Mahjong2048Game {
 
     // Modules
     this.sound = new SoundEngine();
+    this.haptics = new HapticsEngine();
     this.board = new BoardModel();
     this.renderer = new GameRenderer(document.getElementById('canvas-container'));
     this.interaction = new InteractionHandler(
       this.renderer.renderer.domElement,
       this.renderer,
-      (tileId) => this.handleTileClick(tileId)
+      (tileId) => this.handleTileClick(tileId),
+      () => this.resetCamera()
     );
 
     this.initDOM();
@@ -69,13 +72,52 @@ class Mahjong2048Game {
     this.audioBtn.addEventListener('click', () => {
       const isMuted = this.sound.toggleMute();
       this.audioBtn.textContent = isMuted ? '🔇' : '🔊';
+      this.haptics.tap();
     });
+
+    // Haptics button
+    this.hapticBtn = document.getElementById('haptic-toggle-btn');
+    if (this.hapticBtn) {
+      this.hapticBtn.addEventListener('click', () => {
+        const enabled = this.haptics.toggle();
+        this.hapticBtn.textContent = enabled ? '📳' : '📵';
+        this.showBanner(enabled ? "已開啟觸覺震動" : "已關閉觸覺震動", 1000);
+      });
+    }
+
+    // Fullscreen button
+    this.fullscreenBtn = document.getElementById('fullscreen-btn');
+    if (this.fullscreenBtn) {
+      this.fullscreenBtn.addEventListener('click', () => this.toggleFullscreen());
+      document.addEventListener('fullscreenchange', () => {
+        const isFull = !!document.fullscreenElement;
+        this.fullscreenBtn.textContent = isFull ? '🗗' : '⛶';
+      });
+    }
+
+    // Mobile Collapsible Camera panel
+    this.camPanel = document.getElementById('camera-panel');
+    this.camToggleBtn = document.getElementById('cam-toggle-btn');
+    if (this.camToggleBtn && this.camPanel) {
+      this.camToggleBtn.addEventListener('click', () => {
+        this.camPanel.classList.toggle('collapsed');
+        this.haptics.tap();
+      });
+    }
 
     // Camera preset buttons
     document.querySelectorAll('.cam-btn').forEach(btn => {
       btn.addEventListener('click', (e) => {
         const type = e.currentTarget.dataset.cam;
+        document.querySelectorAll('.cam-btn').forEach(b => b.classList.remove('active'));
+        e.currentTarget.classList.add('active');
         this.renderer.setCameraPreset(type);
+        this.haptics.tap();
+
+        // Auto collapse on mobile
+        if (this.camPanel && window.innerWidth <= 768) {
+          this.camPanel.classList.add('collapsed');
+        }
       });
     });
 
@@ -234,9 +276,35 @@ class Mahjong2048Game {
 
     this.renderer.renderBoard(this.board.tiles);
     this.renderer.setCameraPreset('iso');
+    document.querySelectorAll('.cam-btn').forEach(b => {
+      b.classList.toggle('active', b.dataset.cam === 'iso');
+    });
+    if (this.camPanel && window.innerWidth <= 768) {
+      this.camPanel.classList.add('collapsed');
+    }
 
     this.updateRemainingTilesUI();
     this.showBanner(`關卡開始：${level.name}！目標合成 ${targetVal}！`);
+  }
+
+  resetCamera() {
+    this.renderer.setCameraPreset('iso');
+    document.querySelectorAll('.cam-btn').forEach(b => {
+      b.classList.toggle('active', b.dataset.cam === 'iso');
+    });
+    this.haptics.tap();
+    this.showBanner("視角已復位", 800);
+  }
+
+  toggleFullscreen() {
+    this.haptics.tap();
+    if (!document.fullscreenElement) {
+      document.documentElement.requestFullscreen().catch(() => {});
+    } else {
+      if (document.exitFullscreen) {
+        document.exitFullscreen().catch(() => {});
+      }
+    }
   }
 
   updateScoreUI(addedPoints = 0) {
@@ -294,6 +362,7 @@ class Mahjong2048Game {
     // Check if selectable
     if (!clickedTile.isSelectable) {
       this.sound.playInvalid();
+      this.haptics.warning();
       this.showBanner(this.board.isTopBlocked(clickedTile) ? "⚠️ 正上方被壓著，無法選取！" : "⚠️ 邊緣被緊貼包圍，無法抽取！", 1200);
       return;
     }
@@ -304,6 +373,7 @@ class Mahjong2048Game {
       clickedTile.isSelected = true;
       this.renderer.updateTileVisuals(clickedTile);
       this.sound.playSelect();
+      this.haptics.tap();
       return;
     }
 
@@ -313,6 +383,7 @@ class Mahjong2048Game {
       this.renderer.updateTileVisuals(clickedTile);
       this.selectedTile = null;
       this.sound.playDeselect();
+      this.haptics.deselect();
       return;
     }
 
@@ -332,6 +403,7 @@ class Mahjong2048Game {
       this.renderer.updateTileVisuals(tileB);
       this.selectedTile = tileB;
       this.sound.playSelect();
+      this.haptics.tap();
     }
   }
 
@@ -362,7 +434,10 @@ class Mahjong2048Game {
     this.score += points;
     this.updateScoreUI(points);
 
+    this.haptics.merge(newValue);
+
     if (this.combo > 1) {
+      this.haptics.combo(this.combo);
       this.showBanner(`🔥 連鎖 COMBO x${this.combo}！ +${points} 分`);
     }
 
@@ -388,6 +463,7 @@ class Mahjong2048Game {
 
   trigger2048Event(tile, targetVal = 2048) {
     this.sound.play2048();
+    this.haptics.supernova();
     const bonus = targetVal * 10;
     this.score += bonus;
     this.updateScoreUI(bonus);
@@ -437,6 +513,7 @@ class Mahjong2048Game {
     const availablePairs = this.board.findAvailablePairs();
     if (availablePairs.length === 0) {
       // Deadlock condition!
+      this.haptics.warning();
       setTimeout(() => {
         if (this.board.getRemainingCount() > 0) {
           this.deadlockModal.classList.remove('hidden');
@@ -447,6 +524,7 @@ class Mahjong2048Game {
 
   triggerVictory() {
     this.sound.playVictory();
+    this.haptics.victory();
     document.getElementById('v-score').textContent = this.score.toLocaleString();
     document.getElementById('v-max-tile').textContent = this.board.getMaxTileValue();
     document.getElementById('v-moves').textContent = this.moves;
@@ -489,6 +567,7 @@ class Mahjong2048Game {
     this.updateRemainingTilesUI();
     this.updatePowerupBadges();
     this.sound.playSelect();
+    this.haptics.tap();
     this.showBanner("↩️ 已成功復原上一步");
   }
 
@@ -512,6 +591,7 @@ class Mahjong2048Game {
     this.activeHintTiles = [tileA, tileB];
     this.renderer.highlightHintPair(tileA, tileB);
     this.sound.playHint();
+    this.haptics.tap();
     this.showBanner(`💡 為您標示了一組可合併的 [${tileA.value}] 方塊！`);
 
     // Auto clear hint after 3.5s
@@ -539,6 +619,7 @@ class Mahjong2048Game {
     this.board.smartShuffle();
     this.board.tiles.forEach(t => this.renderer.updateTileVisuals(t));
     this.sound.playShuffle();
+    this.haptics.tap();
 
     const pairs = this.board.findAvailablePairs();
     if (pairs.length > 0) {

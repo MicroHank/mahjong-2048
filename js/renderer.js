@@ -1,6 +1,8 @@
 /**
  * Three.js 3D Visual Engine for 3D Mahjong 2048
  * Handles WebGL rendering, lighting, dynamic canvas textures, tile meshes, and particle effects.
+ * Optimized with Demand-driven rendering, Shared Material pools, Particle object pooling,
+ * and Mobile-tailored camera framing.
  */
 
 import * as THREE from 'three';
@@ -34,30 +36,63 @@ export class GameRenderer {
     // Mobile detection
     this.isMobile = /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent) || window.innerWidth < 768;
 
+    // Demand-driven rendering state (Huge mobile power saver!)
+    this.needsRenderFrames = 90;
+    this.activeAnimationCount = 0;
+
     // Cache of Canvas Textures for numbers: "value_selectable" -> CanvasTexture
     this.textureCache = new Map();
     
+    // Top Material Cache: "value_selectable" -> MeshStandardMaterial
+    this.topMatCache = new Map();
+
     // Meshes map: tileId -> THREE.Mesh
     this.tileMeshes = new Map();
 
-    // Particle pool
+    // Active Particles & Reusable Particle Pool (Eliminates GC lag!)
     this.particles = [];
+    this.particlePool = [];
 
-    // Animation tickers
+    // Active animation trackers & trajectory lines
     this.activeTweens = [];
+    this.activeTrajectoryLines = [];
 
-    // Shared Reusable Geometry Pools (Eliminates GC stutter on mobile!)
+    // Shared Reusable Geometry Pools
     this.tileBoxGeo = new THREE.BoxGeometry(0.88, 0.45, 0.88);
     this.sphereParticleGeo = new THREE.SphereGeometry(0.045, 5, 5);
     this.trailParticleGeo = new THREE.SphereGeometry(0.035, 4, 4);
     this.shockwaveGeo = new THREE.RingGeometry(0.2, 0.38, 24);
     this.tetraGeo = new THREE.TetrahedronGeometry(0.08);
 
+    // Shared Body Materials (Sides & Bottom)
+    this.sharedSelectableBodyMat = new THREE.MeshStandardMaterial({
+      color: 0xf8fafc,
+      roughness: 0.35,
+      metalness: 0.1,
+      transparent: false,
+      opacity: 1.0
+    });
+
+    this.sharedUnselectableBodyMat = new THREE.MeshStandardMaterial({
+      color: 0x64748b,
+      roughness: 0.35,
+      metalness: 0.1,
+      transparent: true,
+      opacity: 0.68
+    });
+
     this.initThree();
     this.initLighting();
     this.initBoardEnvironment();
     this.animate = this.animate.bind(this);
     requestAnimationFrame(this.animate);
+  }
+
+  /**
+   * Request frames to be rendered (wakes up demand-driven loop)
+   */
+  requestRender(frames = 30) {
+    this.needsRenderFrames = Math.max(this.needsRenderFrames, frames);
   }
 
   /**
@@ -77,24 +112,24 @@ export class GameRenderer {
   initThree() {
     const width = this.container.clientWidth || window.innerWidth;
     const height = this.container.clientHeight || window.innerHeight;
+    const isPortrait = height > width;
 
     // Scene
     this.scene = new THREE.Scene();
     this.scene.background = new THREE.Color(0x0a0e17);
-    this.scene.fog = new THREE.FogExp2(0x0a0e17, 0.035);
+    this.scene.fog = new THREE.FogExp2(0x0a0e17, 0.032);
 
-    // Camera
+    // Camera with portrait adaptive distance
     this.camera = new THREE.PerspectiveCamera(45, width / height, 0.1, 100);
-    this.camera.position.set(0, 11, 14.5);
+    this.camera.position.set(0, isPortrait ? 13 : 11, isPortrait ? 17.5 : 14.5);
 
     // WebGL Renderer with performance-tailored settings
     this.renderer = new THREE.WebGLRenderer({
-      antialias: !this.isMobile, // Disable MSAA on mobile for huge fill-rate boost
+      antialias: !this.isMobile,
       powerPreference: 'high-performance',
       alpha: true
     });
     this.renderer.setSize(width, height);
-    // Clamp DPR to 1.5 on mobile to avoid 3x retina fill-rate throttling
     this.renderer.setPixelRatio(this.isMobile ? Math.min(window.devicePixelRatio, 1.5) : Math.min(window.devicePixelRatio, 2));
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = this.isMobile ? THREE.BasicShadowMap : THREE.PCFSoftShadowMap;
@@ -108,12 +143,17 @@ export class GameRenderer {
     this.controls.dampingFactor = 0.08;
     this.controls.maxPolarAngle = Math.PI / 2 - 0.05; // Do not go underground
     this.controls.minDistance = 5;
-    this.controls.maxDistance = 24;
+    this.controls.maxDistance = 28;
     this.controls.target.set(0, 1.2, 0);
     this.controls.touches = {
       ONE: THREE.TOUCH.ROTATE,
       TWO: THREE.TOUCH.DOLLY_PAN
     };
+
+    // Wake up render loop on controls interaction
+    this.controls.addEventListener('change', () => {
+      this.requestRender(10);
+    });
 
     // Window resize
     window.addEventListener('resize', () => this.onResize());
@@ -152,7 +192,7 @@ export class GameRenderer {
   }
 
   initBoardEnvironment() {
-    // Grand Pedestal Platform for Dual Heaps (左右兩堆大平台)
+    // Grand Pedestal Platform for Dual Heaps
     const pedestalGeo = new THREE.CylinderGeometry(7.2, 7.8, 0.45, 64);
     const pedestalMat = new THREE.MeshStandardMaterial({
       color: 0x111827,
@@ -248,7 +288,6 @@ export class GameRenderer {
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     
-    // Choose font size based on digits (Significantly larger & bolder)
     const textStr = value.toString();
     if (textStr.length === 1) {
       ctx.font = '900 270px Outfit, sans-serif';
@@ -299,31 +338,32 @@ export class GameRenderer {
   }
 
   /**
-   * Create 3D Mesh for a tile
+   * Cached Top Face Material
    */
-  createTileMesh(tile) {
-    // Shared tile geometry to avoid thousands of allocations
-    const geo = this.tileBoxGeo;
-
-    const topTexture = this.getTileTopTexture(tile.value, tile.isSelectable);
-
-    // Body material (sides & bottom: ivory porcelain with gentle specular)
-    const bodyMat = new THREE.MeshStandardMaterial({
-      color: tile.isSelectable ? 0xf8fafc : 0x94a3b8,
-      roughness: 0.35,
-      metalness: 0.1,
-      transparent: !tile.isSelectable,
-      opacity: tile.isSelectable ? 1.0 : 0.7
-    });
-
-    // Top face material (+Y index is 2 in BoxGeometry material array)
+  getTopMaterial(value, isSelectable) {
+    const key = `${value}_${isSelectable}`;
+    if (this.topMatCache.has(key)) {
+      return this.topMatCache.get(key);
+    }
+    const texture = this.getTileTopTexture(value, isSelectable);
     const topMat = new THREE.MeshStandardMaterial({
-      map: topTexture,
+      map: texture,
       roughness: 0.3,
       metalness: 0.05,
-      transparent: !tile.isSelectable,
-      opacity: tile.isSelectable ? 1.0 : 0.75
+      transparent: !isSelectable,
+      opacity: isSelectable ? 1.0 : 0.75
     });
+    this.topMatCache.set(key, topMat);
+    return topMat;
+  }
+
+  /**
+   * Create 3D Mesh for a tile using pooled shared materials
+   */
+  createTileMesh(tile) {
+    const geo = this.tileBoxGeo;
+    const bodyMat = tile.isSelectable ? this.sharedSelectableBodyMat : this.sharedUnselectableBodyMat;
+    const topMat = this.getTopMaterial(tile.value, tile.isSelectable);
 
     // Materials array for BoxGeometry: [+X, -X, +Y, -Y, +Z, -Z]
     const materials = [
@@ -348,11 +388,12 @@ export class GameRenderer {
    * Build or rebuild the entire board from tile objects
    */
   renderBoard(tiles) {
+    this.cancelAllAnimations();
+
     // Clean old meshes
     this.tileMeshes.forEach(mesh => {
       this.scene.remove(mesh);
       this.safeDisposeGeometry(mesh.geometry);
-      mesh.material.forEach(m => m.dispose());
     });
     this.tileMeshes.clear();
 
@@ -363,11 +404,14 @@ export class GameRenderer {
       this.tileMeshes.set(tile.id, mesh);
       tile.mesh = mesh;
     });
+
+    if (this.selectionBeacon) {
+      this.selectionBeacon.visible = false;
+    }
+
+    this.requestRender(60);
   }
 
-  /**
-   * Update visual states (colors, textures, selection elevation, glows)
-   */
   /**
    * Update visual states (colors, textures, selection elevation, glows)
    */
@@ -375,49 +419,44 @@ export class GameRenderer {
     const mesh = this.tileMeshes.get(tile.id);
     if (!mesh) return;
 
-    // Update Top face texture
-    const newTopTexture = this.getTileTopTexture(tile.value, tile.isSelectable);
-    mesh.material[2].map = newTopTexture;
-    mesh.material[2].needsUpdate = true;
-
-    // Transparency & body color
     const isSel = tile.isSelectable;
-    mesh.material.forEach((mat, idx) => {
-      mat.transparent = !isSel;
-      mat.opacity = isSel ? 1.0 : 0.68;
-      if (idx !== 2) {
-        mat.color.setHex(isSel ? 0xf8fafc : 0x64748b);
-      }
-    });
+    const bodyMat = isSel ? this.sharedSelectableBodyMat : this.sharedUnselectableBodyMat;
+    const topMat = this.getTopMaterial(tile.value, isSel);
 
-    // Handle Selection State: Lift up distinctly (+0.38) and emit brilliant golden glow
+    // Target Elevation
     const targetY = tile.y * 0.46 + 0.225 + (tile.isSelected ? 0.38 : 0);
     mesh.position.y = targetY;
 
     if (tile.isSelected) {
-      mesh.material.forEach(mat => {
-        mat.emissive = new THREE.Color(0xffaa00);
-        mat.emissiveIntensity = 0.85;
-      });
+      // Selected tile gets a dedicated cloned material set to display golden glow
+      const selBodyMat = bodyMat.clone();
+      const selTopMat = topMat.clone();
+      selBodyMat.emissive = new THREE.Color(0xffaa00);
+      selBodyMat.emissiveIntensity = 0.85;
+      selTopMat.emissive = new THREE.Color(0xffaa00);
+      selTopMat.emissiveIntensity = 0.65;
+
+      mesh.material = [selBodyMat, selBodyMat, selTopMat, selBodyMat, selBodyMat, selBodyMat];
+
       if (this.selectionBeacon) {
         this.selectionBeacon.position.set(mesh.position.x, targetY + 0.62, mesh.position.z);
         this.selectionBeacon.visible = true;
       }
     } else {
-      mesh.material.forEach(mat => {
-        mat.emissive = new THREE.Color(0x000000);
-        mat.emissiveIntensity = 0;
-      });
+      // Restore standard pooled materials
+      mesh.material = [bodyMat, bodyMat, topMat, bodyMat, bodyMat, bodyMat];
     }
 
     // Check if any tile is currently selected to hide beacon if none
     const anySelected = Array.from(this.tileMeshes.keys()).some(id => {
       const m = this.tileMeshes.get(id);
-      return m && m.material[0] && m.material[0].emissiveIntensity > 0.5;
+      return m && m.position.y > (tile.y * 0.46 + 0.23);
     });
-    if (!anySelected && this.selectionBeacon) {
+    if (!anySelected && this.selectionBeacon && !tile.isSelected) {
       this.selectionBeacon.visible = false;
     }
+
+    this.requestRender(40);
   }
 
   /**
@@ -425,14 +464,19 @@ export class GameRenderer {
    */
   highlightHintPair(tileA, tileB) {
     [tileA, tileB].forEach(t => {
+      if (!t) return;
       const mesh = this.tileMeshes.get(t.id);
       if (mesh) {
-        mesh.material.forEach(mat => {
-          mat.emissive = new THREE.Color(0x06b6d4);
-          mat.emissiveIntensity = 0.75;
-        });
+        const hintMat = (mesh.material[0] || this.sharedSelectableBodyMat).clone();
+        const hintTopMat = (mesh.material[2] || this.getTopMaterial(t.value, true)).clone();
+        hintMat.emissive = new THREE.Color(0x06b6d4);
+        hintMat.emissiveIntensity = 0.75;
+        hintTopMat.emissive = new THREE.Color(0x06b6d4);
+        hintTopMat.emissiveIntensity = 0.65;
+        mesh.material = [hintMat, hintMat, hintTopMat, hintMat, hintMat, hintMat];
       }
     });
+    this.requestRender(60);
   }
 
   /**
@@ -442,6 +486,7 @@ export class GameRenderer {
     [tileA, tileB].forEach(t => {
       if (t) this.updateTileVisuals(t);
     });
+    this.requestRender(20);
   }
 
   /**
@@ -471,59 +516,79 @@ export class GameRenderer {
 
     // Create 3D Luminous Trajectory Route Line (光弧能量路線)
     const curve = new THREE.QuadraticBezierCurve3(startPos, midPos, endPos);
-    const points = curve.getPoints(40);
+    const points = curve.getPoints(this.isMobile ? 24 : 36);
     const lineGeo = new THREE.BufferGeometry().setFromPoints(points);
     const lineMat = new THREE.LineBasicMaterial({
-      color: 0x00f7ff, // Glowing cyan neon
+      color: 0x00f7ff,
       linewidth: 3,
       transparent: true,
       opacity: 0.95
     });
     const trajectoryLine = new THREE.Line(lineGeo, lineMat);
     this.scene.add(trajectoryLine);
+    this.activeTrajectoryLines.push(trajectoryLine);
 
-    const duration = Math.min(420, Math.max(260, dist * 50)); // Scaled by distance
+    const duration = Math.min(420, Math.max(260, dist * 50));
     const startTime = performance.now();
+    this.activeAnimationCount++;
+
+    let isCancelled = false;
+    const cancelFn = () => {
+      isCancelled = true;
+      this.scene.remove(trajectoryLine);
+      lineGeo.dispose();
+      lineMat.dispose();
+    };
+    this.activeTweens.push(cancelFn);
 
     const tween = (now) => {
+      if (isCancelled) {
+        this.activeAnimationCount = Math.max(0, this.activeAnimationCount - 1);
+        return;
+      }
+
       const elapsed = now - startTime;
       const progress = Math.min(elapsed / duration, 1);
-      // Ease-out cubic
       const ease = 1 - Math.pow(1 - progress, 3);
 
-      // Follow the 3D parabolic trajectory route
       const curPos = curve.getPoint(ease);
       meshA.position.copy(curPos);
-      meshA.rotation.y = ease * Math.PI * 1.5; // Dynamic spin
+      meshA.rotation.y = ease * Math.PI * 1.5;
       meshA.scale.setScalar(1 - progress * 0.25);
 
-      // Emit trail sparks along the flight path
+      // Emit trail sparks along flight path
       if (Math.random() < 0.6) {
         this.createTrailParticle(curPos, tileA.value);
       }
 
+      this.requestRender(5);
+
       if (progress < 1) {
         requestAnimationFrame(tween);
       } else {
-        // Arrived at tile B!
+        this.activeAnimationCount = Math.max(0, this.activeAnimationCount - 1);
+        const idx = this.activeTweens.indexOf(cancelFn);
+        if (idx !== -1) this.activeTweens.splice(idx, 1);
+
         // Remove trajectory route line
         this.scene.remove(trajectoryLine);
+        const lineIdx = this.activeTrajectoryLines.indexOf(trajectoryLine);
+        if (lineIdx !== -1) this.activeTrajectoryLines.splice(lineIdx, 1);
         lineGeo.dispose();
         lineMat.dispose();
 
-        // 1. Trigger Expanding Ground Shockwave Ring
+        // 1. Shockwave Ring
         this.createShockwave(endPos, tileB.value);
 
-        // 2. Trigger Spark Explosion Particles
+        // 2. Spark Explosion
         this.createMergeParticles(endPos, tileB.value);
 
-        // 3. Pop & Squash scale bounce on Tile B
+        // 3. Pop bounce on Tile B
         this.animatePop(meshB);
 
         // Remove meshA from scene
         this.scene.remove(meshA);
         this.safeDisposeGeometry(meshA.geometry);
-        meshA.material.forEach(m => m.dispose());
         this.tileMeshes.delete(tileA.id);
 
         if (onComplete) onComplete();
@@ -534,17 +599,18 @@ export class GameRenderer {
   }
 
   /**
-   * Animate a bouncy pop scale for newly upgraded block
+   * Animate bouncy pop scale for newly upgraded block
    */
   animatePop(mesh) {
+    if (!mesh) return;
     const startTime = performance.now();
     const duration = 240;
+    this.activeAnimationCount++;
 
     const tween = (now) => {
       const elapsed = now - startTime;
       const progress = Math.min(elapsed / duration, 1);
       
-      // Bounce scale: 1.0 -> 1.35 -> 1.0
       let s = 1.0;
       if (progress < 0.5) {
         s = 1.0 + (progress / 0.5) * 0.35;
@@ -552,11 +618,13 @@ export class GameRenderer {
         s = 1.35 - ((progress - 0.5) / 0.5) * 0.35;
       }
       mesh.scale.set(s, s, s);
+      this.requestRender(3);
 
       if (progress < 1) {
         requestAnimationFrame(tween);
       } else {
         mesh.scale.set(1, 1, 1);
+        this.activeAnimationCount = Math.max(0, this.activeAnimationCount - 1);
       }
     };
     requestAnimationFrame(tween);
@@ -571,8 +639,9 @@ export class GameRenderer {
       return;
     }
 
-    const duration = 260; // ms
+    const duration = 260;
     const startTime = performance.now();
+    this.activeAnimationCount++;
 
     const dropStates = drops.map(d => {
       const mesh = this.tileMeshes.get(d.tile.id);
@@ -583,23 +652,33 @@ export class GameRenderer {
       };
     }).filter(d => d.mesh);
 
+    let isCancelled = false;
+    const cancelFn = () => { isCancelled = true; };
+    this.activeTweens.push(cancelFn);
+
     const tween = (now) => {
+      if (isCancelled) {
+        this.activeAnimationCount = Math.max(0, this.activeAnimationCount - 1);
+        return;
+      }
+
       const elapsed = now - startTime;
       const progress = Math.min(elapsed / duration, 1);
-
-      // Bounce-out ease for gravity
-      let ease = progress;
-      if (progress < 1) {
-        ease = Math.pow(progress, 2); // Acceleration
-      }
+      const ease = (progress < 1) ? Math.pow(progress, 2) : 1;
 
       dropStates.forEach(d => {
         d.mesh.position.y = d.startY + (d.targetY - d.startY) * ease;
       });
 
+      this.requestRender(4);
+
       if (progress < 1) {
         requestAnimationFrame(tween);
       } else {
+        this.activeAnimationCount = Math.max(0, this.activeAnimationCount - 1);
+        const idx = this.activeTweens.indexOf(cancelFn);
+        if (idx !== -1) this.activeTweens.splice(idx, 1);
+
         dropStates.forEach(d => {
           d.mesh.position.y = d.targetY;
         });
@@ -611,27 +690,48 @@ export class GameRenderer {
   }
 
   /**
+   * Particle retrieval from Object Pool (recycles meshes to avoid GC stutter)
+   */
+  getPooledParticle(geo, colorHex) {
+    let pObj = this.particlePool.pop();
+    if (!pObj) {
+      const mat = new THREE.MeshBasicMaterial({ color: colorHex });
+      const mesh = new THREE.Mesh(geo, mat);
+      this.scene.add(mesh);
+      pObj = { mesh, mat };
+    } else {
+      pObj.mesh.geometry = geo;
+      pObj.mat.color.setHex(colorHex);
+      pObj.mesh.visible = true;
+    }
+    return pObj;
+  }
+
+  /**
    * Trail sparks along the parabolic merge trajectory
    */
   createTrailParticle(pos, value) {
-    const geo = this.trailParticleGeo;
     const config = TILE_COLORS[value] || { bg: "#00f7ff" };
-    const mat = new THREE.MeshBasicMaterial({ color: new THREE.Color(config.bg) });
-    const p = new THREE.Mesh(geo, mat);
-    p.position.copy(pos);
-    p.position.x += (Math.random() - 0.5) * 0.12;
-    p.position.y += (Math.random() - 0.5) * 0.12;
-    p.position.z += (Math.random() - 0.5) * 0.12;
+    const colorHex = parseInt(config.bg.replace("#", "0x"), 16);
+    const pObj = this.getPooledParticle(this.trailParticleGeo, colorHex);
 
-    this.scene.add(p);
+    pObj.mesh.position.copy(pos);
+    pObj.mesh.position.x += (Math.random() - 0.5) * 0.12;
+    pObj.mesh.position.y += (Math.random() - 0.5) * 0.12;
+    pObj.mesh.position.z += (Math.random() - 0.5) * 0.12;
+    pObj.mesh.scale.set(1, 1, 1);
+
     this.particles.push({
-      mesh: p,
+      mesh: pObj.mesh,
+      mat: pObj.mat,
       vx: (Math.random() - 0.5) * 0.02,
       vy: (Math.random() - 0.5) * 0.02,
       vz: (Math.random() - 0.5) * 0.02,
       life: 0.6,
       decay: 0.06
     });
+
+    this.requestRender(20);
   }
 
   /**
@@ -654,6 +754,7 @@ export class GameRenderer {
 
     const startTime = performance.now();
     const duration = 360;
+    this.activeAnimationCount++;
 
     const tween = (now) => {
       const elapsed = now - startTime;
@@ -662,9 +763,12 @@ export class GameRenderer {
       ring.scale.set(scale, scale, 1);
       ring.material.opacity = 0.95 * (1 - Math.pow(progress, 2));
 
+      this.requestRender(4);
+
       if (progress < 1) {
         requestAnimationFrame(tween);
       } else {
+        this.activeAnimationCount = Math.max(0, this.activeAnimationCount - 1);
         this.scene.remove(ring);
         this.safeDisposeGeometry(geo);
         mat.dispose();
@@ -677,19 +781,16 @@ export class GameRenderer {
    * Particle burst effect for merges
    */
   createMergeParticles(pos, value) {
-    const count = this.isMobile ? 16 : 28;
+    const count = this.isMobile ? 14 : 24;
     const config = TILE_COLORS[value] || { bg: "#f59e0b" };
-    const color = new THREE.Color(config.bg);
+    const colorHex = parseInt(config.bg.replace("#", "0x"), 16);
 
     for (let i = 0; i < count; i++) {
-      const geo = this.sphereParticleGeo;
-      const mat = new THREE.MeshBasicMaterial({ color: color });
-      const p = new THREE.Mesh(geo, mat);
+      const pObj = this.getPooledParticle(this.sphereParticleGeo, colorHex);
       const s = 0.75 + Math.random() * 0.7;
-      p.scale.set(s, s, s);
-      p.position.copy(pos);
+      pObj.mesh.scale.set(s, s, s);
+      pObj.mesh.position.copy(pos);
 
-      // Random spherical velocity
       const theta = Math.random() * Math.PI * 2;
       const phi = Math.random() * Math.PI;
       const speed = 0.05 + Math.random() * 0.09;
@@ -697,31 +798,31 @@ export class GameRenderer {
       const vy = (Math.cos(phi) * 0.5 + 0.5) * speed + 0.04;
       const vz = Math.sin(phi) * Math.sin(theta) * speed;
 
-      this.scene.add(p);
       this.particles.push({
-        mesh: p,
+        mesh: pObj.mesh,
+        mat: pObj.mat,
         vx, vy, vz,
         life: 1.0,
         decay: 0.035 + Math.random() * 0.025
       });
     }
+
+    this.requestRender(35);
   }
 
   /**
    * 2048 Legendary Supernova Explosion
    */
   create2048Explosion(pos) {
-    const count = this.isMobile ? 36 : 70;
+    const count = this.isMobile ? 32 : 60;
     const colors = [0xffd700, 0xff5722, 0xe056fd, 0x00c7b7, 0xffffff];
 
     for (let i = 0; i < count; i++) {
-      const geo = this.tetraGeo;
-      const color = colors[Math.floor(Math.random() * colors.length)];
-      const mat = new THREE.MeshBasicMaterial({ color });
-      const p = new THREE.Mesh(geo, mat);
+      const colorHex = colors[Math.floor(Math.random() * colors.length)];
+      const pObj = this.getPooledParticle(this.tetraGeo, colorHex);
       const s = 0.75 + Math.random() * 0.7;
-      p.scale.set(s, s, s);
-      p.position.copy(pos);
+      pObj.mesh.scale.set(s, s, s);
+      pObj.mesh.position.copy(pos);
 
       const theta = Math.random() * Math.PI * 2;
       const phi = Math.random() * Math.PI;
@@ -730,14 +831,16 @@ export class GameRenderer {
       const vy = Math.cos(phi) * speed + 0.06;
       const vz = Math.sin(phi) * Math.sin(theta) * speed;
 
-      this.scene.add(p);
       this.particles.push({
-        mesh: p,
+        mesh: pObj.mesh,
+        mat: pObj.mat,
         vx, vy, vz,
         life: 1.0,
         decay: 0.02 + Math.random() * 0.015
       });
     }
+
+    this.requestRender(60);
   }
 
   /**
@@ -753,32 +856,34 @@ export class GameRenderer {
     this.create2048Explosion(mesh.position);
     this.scene.remove(mesh);
     this.safeDisposeGeometry(mesh.geometry);
-    mesh.material.forEach(m => m.dispose());
     this.tileMeshes.delete(tileId);
 
     if (onComplete) onComplete();
+    this.requestRender(60);
   }
 
   /**
-   * Camera Presets: 'iso', 'top', 'front', 'reset'
+   * Camera Presets: 'iso', 'top', 'front', 'reset' with mobile portrait adaptivity
    */
   setCameraPreset(type) {
+    const isPortrait = window.innerHeight > window.innerWidth;
     const target = this.controls.target;
     switch(type) {
       case 'top':
-        this.camera.position.set(0, 17, 0.01);
+        this.camera.position.set(0, isPortrait ? 19.5 : 17, 0.01);
         break;
       case 'front':
-        this.camera.position.set(0, 4.5, 15);
+        this.camera.position.set(0, 4.5, isPortrait ? 17.5 : 15);
         break;
       case 'iso':
       case 'reset':
       default:
-        this.camera.position.set(0, 11, 14.5);
+        this.camera.position.set(0, isPortrait ? 13 : 11, isPortrait ? 17.5 : 14.5);
         break;
     }
     this.camera.lookAt(target);
     this.controls.update();
+    this.requestRender(60);
   }
 
   /**
@@ -802,46 +907,97 @@ export class GameRenderer {
   onResize() {
     const width = this.container.clientWidth || window.innerWidth;
     const height = this.container.clientHeight || window.innerHeight;
+    this.isMobile = /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent) || width < 768;
     this.camera.aspect = width / height;
     this.camera.updateProjectionMatrix();
     this.renderer.setSize(width, height);
+    this.requestRender(30);
   }
 
   /**
-   * Main Render Tick
+   * Cancel and cleanup any running animations and temporary effects
    */
-  animate() {
-    requestAnimationFrame(this.animate);
+  cancelAllAnimations() {
+    this.activeTweens.forEach(fn => {
+      try { fn(); } catch {}
+    });
+    this.activeTweens = [];
+    this.activeAnimationCount = 0;
 
-    // Update Controls
-    this.controls.update();
+    this.activeTrajectoryLines.forEach(line => {
+      this.scene.remove(line);
+      line.geometry.dispose();
+      line.material.dispose();
+    });
+    this.activeTrajectoryLines = [];
 
-    // Animate 3D Selection Beacon
-    if (this.selectionBeacon && this.selectionBeacon.visible) {
-      this.selectionBeacon.rotation.y += 0.045;
-      if (this.selectionBeacon.children[0]) {
-        this.selectionBeacon.children[0].rotation.y -= 0.06;
-      }
+    for (let i = this.particles.length - 1; i >= 0; i--) {
+      const p = this.particles[i];
+      p.mesh.visible = false;
+      this.particlePool.push({ mesh: p.mesh, mat: p.mat });
     }
+    this.particles = [];
+    this.requestRender(10);
+  }
 
-    // Update Particles
+  /**
+   * Update active particles and recycle dead ones to pool
+   */
+  updateParticles() {
     for (let i = this.particles.length - 1; i >= 0; i--) {
       const p = this.particles[i];
       p.mesh.position.x += p.vx;
       p.mesh.position.y += p.vy;
       p.mesh.position.z += p.vz;
-      p.vy -= 0.003; // Gravity
+      p.vy -= 0.003;
       p.life -= p.decay;
       p.mesh.scale.setScalar(Math.max(p.life, 0.01));
 
       if (p.life <= 0) {
-        this.scene.remove(p.mesh);
-        this.safeDisposeGeometry(p.mesh.geometry);
-        p.mesh.material.dispose();
+        p.mesh.visible = false;
+        this.particlePool.push({ mesh: p.mesh, mat: p.mat });
         this.particles.splice(i, 1);
       }
     }
+  }
 
-    this.renderer.render(this.scene, this.camera);
+  /**
+   * Demand-driven Main Render Loop
+   * Renders only when dirty, during animations, or while camera is moving.
+   */
+  animate() {
+    requestAnimationFrame(this.animate);
+
+    // controls.update() returns true when camera position/rotation changes
+    const controlsMoved = this.controls.update();
+    if (controlsMoved) {
+      this.needsRenderFrames = Math.max(this.needsRenderFrames, 8);
+    }
+
+    const hasActiveParticles = this.particles.length > 0;
+    const hasActiveTweens = this.activeAnimationCount > 0;
+    const isBeaconActive = this.selectionBeacon && this.selectionBeacon.visible;
+
+    // Check if render frame is necessary
+    if (controlsMoved || hasActiveParticles || hasActiveTweens || isBeaconActive || this.needsRenderFrames > 0) {
+      if (this.needsRenderFrames > 0) {
+        this.needsRenderFrames--;
+      }
+
+      // Animate 3D Selection Beacon
+      if (isBeaconActive) {
+        this.selectionBeacon.rotation.y += 0.045;
+        if (this.selectionBeacon.children[0]) {
+          this.selectionBeacon.children[0].rotation.y -= 0.06;
+        }
+      }
+
+      // Update active particles
+      if (hasActiveParticles) {
+        this.updateParticles();
+      }
+
+      this.renderer.render(this.scene, this.camera);
+    }
   }
 }

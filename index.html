@@ -68,6 +68,8 @@
           <span id="best-score-display">0</span>
         </div>
         <div class="quick-icons">
+          <button id="fullscreen-btn" class="icon-btn" title="切換全螢幕">⛶</button>
+          <button id="haptic-toggle-btn" class="icon-btn" title="開啟/關閉震動">📳</button>
           <button id="audio-toggle-btn" class="icon-btn" title="開啟/關閉音效">🔊</button>
           <button id="help-btn" class="icon-btn" title="玩法說明">❓</button>
         </div>
@@ -83,12 +85,17 @@
       </div>
     </div>
 
-    <!-- 3D Camera Quick Controls (Right side) -->
-    <div class="camera-panel">
-      <button class="cam-btn" data-cam="iso" title="等角立體視角 (Isometric)">📐 3D</button>
-      <button class="cam-btn" data-cam="top" title="正上方鳥瞰 (Top-down)">🎯 頂視</button>
-      <button class="cam-btn" data-cam="front" title="正視視角 (Front)">🏢 正視</button>
-      <button class="cam-btn" data-cam="reset" title="重設相機位置">🔄 重置</button>
+    <!-- 3D Camera Quick Controls (Collapsible & Floating) -->
+    <div id="camera-panel" class="camera-panel">
+      <button id="cam-toggle-btn" class="cam-toggle-btn" title="展開/收合視角選單">
+        <span id="cam-toggle-icon">📐</span>
+      </button>
+      <div id="cam-options" class="cam-options">
+        <button class="cam-btn active" data-cam="iso" title="等角立體視角 (Isometric)">📐 3D</button>
+        <button class="cam-btn" data-cam="top" title="正上方鳥瞰 (Top-down)">🎯 頂視</button>
+        <button class="cam-btn" data-cam="front" title="正視視角 (Front)">🏢 正視</button>
+        <button class="cam-btn" data-cam="reset" title="重設相機位置">🔄 重置</button>
+      </div>
     </div>
 
     <!-- Bottom Action Toolbar -->
@@ -153,8 +160,9 @@
         <div class="help-section">
           <h3>🎮 基本操作</h3>
           <p>• <strong>旋轉視角</strong>：在背景按住滑鼠左鍵（或單指觸控）拖曳可 360 度旋轉。</p>
-          <p>• <strong>縮放視野</strong>：滑鼠滾輪或雙指捏合縮放。</p>
+          <p>• <strong>縮放視野</strong>：滑鼠滾輪或雙指捏合縮放（已防誤觸）。</p>
           <p>• <strong>平移鏡頭</strong>：滑鼠右鍵拖曳或雙指平移。</p>
+          <p>• <strong>快速復位</strong>：在空白背景處「雙擊」或點選右側選單可瞬間重設視角。</p>
         </div>
         <div class="help-section">
           <h3>🀄 玩法與遮蔽規則</h3>

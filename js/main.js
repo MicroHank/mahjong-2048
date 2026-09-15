@@ -418,8 +418,37 @@ class Mahjong2048Game {
     const tileB = clickedTile;
 
     if (tileA.value === tileB.value) {
+      // 1. Same-elevation Line-of-Sight check:
+      // If both tiles are on the same height level, direct path must NOT be obstructed by higher tiles
+      if (Math.abs(tileA.y - tileB.y) < 0.4) {
+        const blocker = this.board.isPathBlockedByHigherTiles(tileA, tileB);
+        if (blocker) {
+          this.sound.playRouteBlocked();
+          this.haptics.wallBlocked();
+          this.renderer.animateBlockedRoute(tileA, tileB, blocker);
+          this.showBanner("⚠️ 航線受阻！中間有高層方塊阻擋，請先削平高處障礙！", 2000);
+          return;
+        }
+      }
+
+      // 2. Elevation Flow Rule: Higher tile flies down into lower tile
+      let sourceTile, targetTile;
+      if (tileA.y > tileB.y) {
+        // Tile A is higher -> drops down to B
+        sourceTile = tileA;
+        targetTile = tileB;
+      } else if (tileB.y > tileA.y) {
+        // Tile B is higher -> drops down to A
+        sourceTile = tileB;
+        targetTile = tileA;
+      } else {
+        // Same height -> First selected flies to second selected
+        sourceTile = tileA;
+        targetTile = tileB;
+      }
+
       // MATCH! Execute Merge
-      this.executeMerge(tileA, tileB);
+      this.executeMerge(sourceTile, targetTile);
     } else {
       // Different value: switch selection to clicked tile
       tileA.isSelected = false;
@@ -433,7 +462,7 @@ class Mahjong2048Game {
     }
   }
 
-  executeMerge(tileA, tileB) {
+  executeMerge(sourceTile, targetTile) {
     this.isAnimating = true;
     this.moves++;
 
@@ -441,9 +470,11 @@ class Mahjong2048Game {
     this.board.saveSnapshot(this.score);
     this.updatePowerupBadges();
 
-    // Deselect tileA visually before flying
-    tileA.isSelected = false;
-    this.renderer.updateTileVisuals(tileA);
+    // Deselect all tiles visually before flying
+    sourceTile.isSelected = false;
+    this.renderer.updateTileVisuals(sourceTile);
+    targetTile.isSelected = false;
+    this.renderer.updateTileVisuals(targetTile);
     this.selectedTile = null;
 
     // Combo system (merges within 3.5s increase multiplier)
@@ -455,7 +486,7 @@ class Mahjong2048Game {
     }
     this.lastMergeTime = now;
 
-    const newValue = tileA.value * 2;
+    const newValue = sourceTile.value * 2;
     const points = newValue * this.combo;
     this.score += points;
     this.updateScoreUI(points);
@@ -468,13 +499,13 @@ class Mahjong2048Game {
     }
 
     // Run 3D merge animation
-    this.renderer.animateMerge(tileA, tileB, () => {
-      // TileA is removed in 3D
-      this.board.removeTile(tileA.id);
-      tileB.value = newValue;
+    this.renderer.animateMerge(sourceTile, targetTile, () => {
+      // Source tile is removed in 3D (merged into target)
+      this.board.removeTile(sourceTile.id);
+      targetTile.value = newValue;
 
       // Check and break adjacent ice
-      const defrosted = this.board.breakAdjacentIce(tileA, tileB);
+      const defrosted = this.board.breakAdjacentIce(sourceTile, targetTile);
       if (defrosted.length > 0) {
         defrosted.forEach(t => {
           this.renderer.animateIceShatter(t);
@@ -492,10 +523,10 @@ class Mahjong2048Game {
 
       if (newValue >= targetVal) {
         // Target reached!
-        this.trigger2048Event(tileB, targetVal);
+        this.trigger2048Event(targetTile, targetVal);
       } else {
         this.sound.playMerge(newValue);
-        this.renderer.updateTileVisuals(tileB);
+        this.renderer.updateTileVisuals(targetTile);
         this.triggerGravityCascade();
       }
     });

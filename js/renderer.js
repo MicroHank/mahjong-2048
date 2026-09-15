@@ -623,6 +623,115 @@ export class GameRenderer {
   }
 
   /**
+   * Blocked Route Animation (Laser obstruction warning line + blocker shake & red flash)
+   */
+  animateBlockedRoute(tileA, tileB, blockerTile, onComplete) {
+    const meshA = this.tileMeshes.get(tileA.id);
+    const meshB = this.tileMeshes.get(tileB.id);
+    const blockerMesh = blockerTile ? this.tileMeshes.get(blockerTile.id) : null;
+
+    if (!meshA || !meshB) {
+      if (onComplete) onComplete();
+      return;
+    }
+
+    this.activeAnimationCount++;
+
+    // 1. Shake Tile A and Tile B
+    this.animateShake(tileA);
+    this.animateShake(tileB);
+
+    // 2. Draw Red Obstruction Warning Line
+    const startPos = meshA.position.clone();
+    startPos.y += 0.25;
+    const endPos = meshB.position.clone();
+    endPos.y += 0.25;
+
+    let midPos;
+    if (blockerMesh) {
+      midPos = blockerMesh.position.clone();
+      midPos.y += 0.3;
+    } else {
+      midPos = startPos.clone().add(endPos).multiplyScalar(0.5);
+      midPos.y += 0.8;
+    }
+
+    const curve = new THREE.QuadraticBezierCurve3(startPos, midPos, endPos);
+    const points = curve.getPoints(this.isMobile ? 20 : 30);
+    const lineGeo = new THREE.BufferGeometry().setFromPoints(points);
+    const lineMat = new THREE.LineBasicMaterial({
+      color: 0xff1744, // Neon Crimson Red
+      linewidth: 3,
+      transparent: true,
+      opacity: 0.95
+    });
+    const warningLine = new THREE.Line(lineGeo, lineMat);
+    this.scene.add(warningLine);
+
+    // 3. Red Sparks at the obstruction point
+    const sparkCenter = blockerMesh ? blockerMesh.position.clone() : midPos;
+    const sparkCount = this.isMobile ? 12 : 20;
+    const redColors = [0xff1744, 0xff5252, 0xff9100, 0xffd600];
+
+    for (let i = 0; i < sparkCount; i++) {
+      const colorHex = redColors[Math.floor(Math.random() * redColors.length)];
+      const pObj = this.getPooledParticle(this.tetraGeo, colorHex);
+      const s = 0.65 + Math.random() * 0.6;
+      pObj.mesh.scale.set(s, s, s);
+      pObj.mesh.position.copy(sparkCenter);
+      pObj.mesh.position.y += 0.2;
+
+      const theta = Math.random() * Math.PI * 2;
+      const speed = 0.04 + Math.random() * 0.08;
+      const vx = Math.cos(theta) * speed;
+      const vy = 0.04 + Math.random() * 0.07;
+      const vz = Math.sin(theta) * speed;
+
+      this.particles.push({
+        mesh: pObj.mesh,
+        mat: pObj.mat,
+        vx, vy, vz,
+        life: 1.0,
+        decay: 0.045 + Math.random() * 0.025
+      });
+    }
+
+    // 4. Highlight & Shake blocker tile
+    let originalBlockerMats = null;
+    if (blockerMesh && Array.isArray(blockerMesh.material)) {
+      originalBlockerMats = blockerMesh.material;
+      const redMat = (blockerMesh.material[0] || this.sharedSelectableBodyMat).clone();
+      redMat.emissive = new THREE.Color(0xff1744);
+      redMat.emissiveIntensity = 0.9;
+      const redTopMat = (blockerMesh.material[2] || this.getTopMaterial(blockerTile.value, true)).clone();
+      redTopMat.emissive = new THREE.Color(0xff1744);
+      redTopMat.emissiveIntensity = 0.8;
+      blockerMesh.material = [redMat, redMat, redTopMat, redMat, redMat, redMat];
+
+      if (blockerTile) {
+        this.animateShake(blockerTile);
+      }
+    }
+
+    this.requestRender(45);
+
+    // Auto cleanup after warning flash
+    setTimeout(() => {
+      this.scene.remove(warningLine);
+      lineGeo.dispose();
+      lineMat.dispose();
+
+      if (blockerMesh && originalBlockerMats) {
+        this.updateTileVisuals(blockerTile);
+      }
+
+      this.activeAnimationCount = Math.max(0, this.activeAnimationCount - 1);
+      this.requestRender(10);
+      if (onComplete) onComplete();
+    }, 550);
+  }
+
+  /**
    * Animate Ice Shatter / Break Effect for defrosted tile
    */
   animateIceShatter(tile, onComplete) {

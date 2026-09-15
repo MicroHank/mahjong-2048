@@ -1,7 +1,22 @@
 /**
  * 3D Mahjong 2048 Game Board Model
- * Manages 3D grid, occlusion rules, gravity cascade, and match logic.
  */
+/**
+ * Compute the shortest distance from 2D point (px, pz) to line segment (x1, z1) -> (x2, z2)
+ */
+function distPointToSegment(px, pz, x1, z1, x2, z2) {
+  const dx = x2 - x1;
+  const dz = z2 - z1;
+  const lenSq = dx * dx + dz * dz;
+  if (lenSq === 0) {
+    return Math.hypot(px - x1, pz - z1);
+  }
+  let t = ((px - x1) * dx + (pz - z1) * dz) / lenSq;
+  t = Math.max(0, Math.min(1, t));
+  const projX = x1 + t * dx;
+  const projZ = z1 + t * dz;
+  return Math.hypot(px - projX, pz - projZ);
+}
 
 export class BoardModel {
   constructor() {
@@ -249,6 +264,37 @@ export class BoardModel {
   }
 
   /**
+   * Check if direct path between two tiles at the same elevation is blocked by higher tiles (y > tile.y)
+   * Returns the blocking tile object if blocked, or null if clear.
+   */
+  isPathBlockedByHigherTiles(tileA, tileB) {
+    if (Math.abs(tileA.y - tileB.y) > 0.4) {
+      return null; // Different heights: handled by top-to-bottom gravity flow
+    }
+
+    const elevation = Math.min(tileA.y, tileB.y);
+    let closestBlocker = null;
+    let minDistance = Infinity;
+
+    for (const t of this.tiles) {
+      if (t.id === tileA.id || t.id === tileB.id) continue;
+      // Must be at a higher level than the candidate tiles
+      if (t.y <= elevation + 0.4) continue;
+
+      const dist = distPointToSegment(t.x, t.z, tileA.x, tileA.z, tileB.x, tileB.z);
+      // Half-width collision envelope (0.52 corresponds to overlapping tile bounds)
+      if (dist < 0.52) {
+        if (dist < minDistance) {
+          minDistance = dist;
+          closestBlocker = t;
+        }
+      }
+    }
+
+    return closestBlocker;
+  }
+
+  /**
    * Find available matching pairs among selectable tiles
    */
   findAvailablePairs() {
@@ -258,6 +304,12 @@ export class BoardModel {
     for (let i = 0; i < selectable.length; i++) {
       for (let j = i + 1; j < selectable.length; j++) {
         if (selectable[i].value === selectable[j].value) {
+          // If on same elevation level, verify line of sight is not blocked by higher tiles
+          if (Math.abs(selectable[i].y - selectable[j].y) < 0.4) {
+            if (this.isPathBlockedByHigherTiles(selectable[i], selectable[j])) {
+              continue; // Blocked by higher ridge / mountain!
+            }
+          }
           pairs.push([selectable[i], selectable[j]]);
         }
       }

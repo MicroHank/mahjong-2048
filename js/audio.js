@@ -385,4 +385,34 @@ export class SoundEngine {
     osc.start(now);
     osc.stop(now + 0.14);
   }
+
+  /**
+   * Route Blocked Warning (Laser deflection buzz when path is obstructed by higher ridge)
+   */
+  playRouteBlocked() {
+    if (this.isMuted || !this.ctx) return;
+    this.ensureAudio();
+
+    const now = this.ctx.currentTime;
+
+    // Dual pulse buzz
+    [0, 0.09].forEach(offset => {
+      const t = now + offset;
+      const osc = this.ctx.createOscillator();
+      const gain = this.ctx.createGain();
+
+      osc.type = "sawtooth";
+      osc.frequency.setValueAtTime(320, t);
+      osc.frequency.exponentialRampToValueAtTime(140, t + 0.07);
+
+      gain.gain.setValueAtTime(0.28, t);
+      gain.gain.exponentialRampToValueAtTime(0.001, t + 0.07);
+
+      osc.connect(gain);
+      gain.connect(this.ctx.destination);
+
+      osc.start(t);
+      osc.stop(t + 0.07);
+    });
+  }
 }

@@ -89,6 +89,12 @@ export class GameRenderer {
       opacity: 0.92
     });
 
+    this.sharedWallBodyMat = new THREE.MeshStandardMaterial({
+      color: 0x18181b,
+      roughness: 0.85,
+      metalness: 0.8
+    });
+
     this.initThree();
     this.initLighting();
     this.initBoardEnvironment();
@@ -261,8 +267,8 @@ export class GameRenderer {
   /**
    * Generates or fetches dynamic canvas texture for top of tile
    */
-  getTileTopTexture(value, isSelectable, isFrozen = false) {
-    const key = `${value}_${isSelectable}_${isFrozen}`;
+  getTileTopTexture(value, isSelectable, isFrozen = false, isWall = false, isTrapped = false) {
+    const key = `${value}_${isSelectable}_${isFrozen}_${isWall}_${isTrapped}`;
     if (this.textureCache.has(key)) {
       return this.textureCache.get(key);
     }
@@ -274,7 +280,54 @@ export class GameRenderer {
 
     const config = TILE_COLORS[value] || { bg: "#ff5722", text: "#ffffff", border: "#e64a19" };
 
-    if (isFrozen) {
+    if (isWall) {
+      // Dark metallic obsidian fortress look with cyber runes
+      const grad = ctx.createLinearGradient(0, 0, 512, 512);
+      grad.addColorStop(0, '#1e293b');
+      grad.addColorStop(0.5, '#0f172a');
+      grad.addColorStop(1, '#020617');
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, 512, 512);
+
+      // Steel border with cyan trim
+      ctx.lineWidth = 26;
+      ctx.strokeStyle = '#334155';
+      ctx.strokeRect(16, 16, 480, 480);
+
+      ctx.lineWidth = 6;
+      ctx.strokeStyle = '#06b6d4';
+      ctx.strokeRect(34, 34, 444, 444);
+
+      // Reinforced rivets at corners
+      ctx.fillStyle = '#64748b';
+      const cornerSize = 44;
+      ctx.fillRect(20, 20, cornerSize, cornerSize);
+      ctx.fillRect(512 - 20 - cornerSize, 20, cornerSize, cornerSize);
+      ctx.fillRect(20, 512 - 20 - cornerSize, cornerSize, cornerSize);
+      ctx.fillRect(512 - 20 - cornerSize, 512 - 20 - cornerSize, cornerSize, cornerSize);
+
+      // Cyber hazard lines
+      ctx.strokeStyle = 'rgba(6, 182, 212, 0.35)';
+      ctx.lineWidth = 4;
+      ctx.beginPath();
+      ctx.moveTo(80, 80); ctx.lineTo(432, 432);
+      ctx.moveTo(432, 80); ctx.lineTo(80, 432);
+      ctx.stroke();
+
+      // Fortress Wall Emblem
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.font = 'bold 125px sans-serif';
+      ctx.fillStyle = '#06b6d4';
+      ctx.shadowColor = '#06b6d4';
+      ctx.shadowBlur = 24;
+      ctx.fillText("🧱", 256, 235);
+
+      ctx.font = '900 46px Outfit, sans-serif';
+      ctx.fillStyle = '#94a3b8';
+      ctx.shadowBlur = 0;
+      ctx.fillText("WALL", 256, 360);
+    } else if (isFrozen) {
       // Ice crystal background gradient
       const grad = ctx.createLinearGradient(0, 0, 512, 512);
       grad.addColorStop(0, '#c7e6fc');
@@ -384,12 +437,12 @@ export class GameRenderer {
       ctx.shadowColor = 'transparent';
 
       if (!isSelectable) {
-        ctx.fillStyle = 'rgba(10, 14, 23, 0.65)';
+        ctx.fillStyle = 'rgba(10, 14, 23, 0.7)';
         ctx.fillRect(0, 0, 512, 512);
 
         ctx.font = '90px sans-serif';
-        ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
-        ctx.fillText("🔒", 256, 256);
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.75)';
+        ctx.fillText(isTrapped ? "🧱" : "🔒", 256, 256);
       }
     }
 
@@ -403,18 +456,18 @@ export class GameRenderer {
   /**
    * Cached Top Face Material
    */
-  getTopMaterial(value, isSelectable, isFrozen = false) {
-    const key = `${value}_${isSelectable}_${isFrozen}`;
+  getTopMaterial(value, isSelectable, isFrozen = false, isWall = false, isTrapped = false) {
+    const key = `${value}_${isSelectable}_${isFrozen}_${isWall}_${isTrapped}`;
     if (this.topMatCache.has(key)) {
       return this.topMatCache.get(key);
     }
-    const texture = this.getTileTopTexture(value, isSelectable, isFrozen);
+    const texture = this.getTileTopTexture(value, isSelectable, isFrozen, isWall, isTrapped);
     const topMat = new THREE.MeshStandardMaterial({
       map: texture,
-      roughness: isFrozen ? 0.15 : 0.3,
-      metalness: isFrozen ? 0.25 : 0.05,
-      transparent: isFrozen || !isSelectable,
-      opacity: isFrozen ? 0.95 : (isSelectable ? 1.0 : 0.75)
+      roughness: isWall ? 0.85 : (isFrozen ? 0.15 : 0.3),
+      metalness: isWall ? 0.8 : (isFrozen ? 0.25 : 0.05),
+      transparent: isFrozen || !isSelectable || isWall,
+      opacity: isWall ? 1.0 : (isFrozen ? 0.95 : (isSelectable ? 1.0 : 0.75))
     });
     this.topMatCache.set(key, topMat);
     return topMat;
@@ -426,7 +479,9 @@ export class GameRenderer {
   createTileMesh(tile) {
     const geo = this.tileBoxGeo;
     let bodyMat;
-    if (tile.isFrozen) {
+    if (tile.isWall) {
+      bodyMat = this.sharedWallBodyMat;
+    } else if (tile.isFrozen) {
       bodyMat = this.sharedFrozenBodyMat;
     } else if (tile.isSelectable) {
       bodyMat = this.sharedSelectableBodyMat;
@@ -434,7 +489,7 @@ export class GameRenderer {
       bodyMat = this.sharedUnselectableBodyMat;
     }
 
-    const topMat = this.getTopMaterial(tile.value, tile.isSelectable, tile.isFrozen);
+    const topMat = this.getTopMaterial(tile.value, tile.isSelectable, tile.isFrozen, tile.isWall, tile.isTrapped);
 
     // Materials array for BoxGeometry: [+X, -X, +Y, -Y, +Z, -Z]
     const materials = [
@@ -484,7 +539,7 @@ export class GameRenderer {
   }
 
   /**
-   * Update visual states (colors, textures, selection elevation, glows, ice)
+   * Update visual states (colors, textures, selection elevation, glows, ice, walls)
    */
   updateTileVisuals(tile) {
     const mesh = this.tileMeshes.get(tile.id);
@@ -493,22 +548,25 @@ export class GameRenderer {
     let bodyMat;
     let topMat;
 
-    if (tile.isFrozen) {
+    if (tile.isWall) {
+      bodyMat = this.sharedWallBodyMat;
+      topMat = this.getTopMaterial(0, false, false, true, false);
+    } else if (tile.isFrozen) {
       bodyMat = this.sharedFrozenBodyMat;
-      topMat = this.getTopMaterial(tile.value, false, true);
+      topMat = this.getTopMaterial(tile.value, false, true, false, false);
     } else if (tile.isSelectable) {
       bodyMat = this.sharedSelectableBodyMat;
-      topMat = this.getTopMaterial(tile.value, true, false);
+      topMat = this.getTopMaterial(tile.value, true, false, false, false);
     } else {
       bodyMat = this.sharedUnselectableBodyMat;
-      topMat = this.getTopMaterial(tile.value, false, false);
+      topMat = this.getTopMaterial(tile.value, false, false, false, tile.isTrapped);
     }
 
     // Target Elevation
     const targetY = tile.y * 0.46 + 0.225 + (tile.isSelected ? 0.38 : 0);
     mesh.position.y = targetY;
 
-    if (tile.isSelected && !tile.isFrozen) {
+    if (tile.isSelected && !tile.isFrozen && !tile.isWall) {
       // Selected tile gets a dedicated cloned material set to display golden glow
       const selBodyMat = bodyMat.clone();
       const selTopMat = topMat.clone();
@@ -538,6 +596,30 @@ export class GameRenderer {
     }
 
     this.requestRender(40);
+  }
+
+  /**
+   * Tactile shake animation when hitting an impassable wall or trapped tile
+   */
+  animateShake(tile) {
+    const mesh = this.tileMeshes.get(tile.id);
+    if (!mesh) return;
+
+    const startX = mesh.position.x;
+    const offsets = [-0.035, 0.035, -0.025, 0.02, 0];
+    let step = 0;
+
+    const shakeInterval = setInterval(() => {
+      if (step < offsets.length) {
+        mesh.position.x = startX + offsets[step];
+        this.requestRender(4);
+        step++;
+      } else {
+        mesh.position.x = startX;
+        clearInterval(shakeInterval);
+        this.requestRender(4);
+      }
+    }, 28);
   }
 
   /**

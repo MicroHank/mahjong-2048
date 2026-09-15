@@ -92,6 +92,13 @@ export class HapticsEngine {
   }
 
   /**
+   * Heavy double resistance buzz when hitting a wall or trapped tile
+   */
+  wallBlocked() {
+    this.vibrate([28, 35, 28]);
+  }
+
+  /**
    * Level completion fanfare vibration
    */
   victory() {

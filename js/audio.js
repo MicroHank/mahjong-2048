@@ -360,4 +360,29 @@ export class SoundEngine {
       osc.stop(startTime + 0.22);
     });
   }
+
+  /**
+   * Wall Collision / Trapped Tile Rejection (Heavy metallic stone thud)
+   */
+  playWallThud() {
+    if (this.isMuted || !this.ctx) return;
+    this.ensureAudio();
+
+    const now = this.ctx.currentTime;
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+
+    osc.type = "sawtooth";
+    osc.frequency.setValueAtTime(160, now);
+    osc.frequency.exponentialRampToValueAtTime(45, now + 0.14);
+
+    gain.gain.setValueAtTime(0.35, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.14);
+
+    osc.connect(gain);
+    gain.connect(this.ctx.destination);
+
+    osc.start(now);
+    osc.stop(now + 0.14);
+  }
 }

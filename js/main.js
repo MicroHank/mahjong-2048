@@ -359,6 +359,15 @@ class Mahjong2048Game {
       this.activeHintTiles = null;
     }
 
+    // Check if Wall
+    if (clickedTile.isWall) {
+      this.sound.playWallThud();
+      this.haptics.wallBlocked();
+      this.renderer.animateShake(clickedTile);
+      this.showBanner("🧱 黑曜石城牆！固若金湯的防禦障礙，無法選取！", 1400);
+      return;
+    }
+
     // Check if frozen
     if (clickedTile.isFrozen) {
       this.sound.playIceHit();
@@ -367,11 +376,20 @@ class Mahjong2048Game {
       return;
     }
 
+    // Check if trapped by walls or adjacent tiles
+    if (clickedTile.isTrapped || this.board.isWallTrapped(clickedTile)) {
+      this.sound.playWallThud();
+      this.haptics.wallBlocked();
+      this.renderer.animateShake(clickedTile);
+      this.showBanner("🧱 兩側被牆體夾緊，無法抽取！請先清空外側通道！", 1400);
+      return;
+    }
+
     // Check if selectable
     if (!clickedTile.isSelectable) {
       this.sound.playInvalid();
       this.haptics.warning();
-      this.showBanner(this.board.isTopBlocked(clickedTile) ? "⚠️ 正上方被壓著，無法選取！" : "⚠️ 邊緣被緊貼包圍，無法抽取！", 1200);
+      this.showBanner("⚠️ 正上方被壓著，無法選取！", 1200);
       return;
     }
 
@@ -579,6 +597,7 @@ class Mahjong2048Game {
       z: t.z,
       value: t.value,
       isFrozen: !!t.isFrozen,
+      isWall: !!t.isWall,
       isSelected: false,
       isSelectable: false,
       mesh: null

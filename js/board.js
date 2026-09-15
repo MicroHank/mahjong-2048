@@ -21,18 +21,23 @@ export class BoardModel {
     this.historyStack = [];
     this.nextTileId = 1;
 
+    let numIdx = 0;
     coords.forEach((c, idx) => {
-      const isFrozen = !!c.isFrozen || (Array.isArray(frozenIndices) 
+      const isWall = !!c.isWall;
+      const isFrozen = !isWall && (!!c.isFrozen || (Array.isArray(frozenIndices) 
         ? frozenIndices.includes(idx)
-        : (frozenIndices instanceof Set ? frozenIndices.has(idx) : false));
+        : (frozenIndices instanceof Set ? frozenIndices.has(idx) : false)));
+
+      const val = isWall ? 0 : (numbers[numIdx++] || 2);
 
       this.tiles.push({
         id: this.nextTileId++,
         x: c.x,
         y: c.y,
         z: c.z,
-        value: numbers[idx] || 2,
+        value: val,
         isFrozen: isFrozen,
+        isWall: isWall,
         isSelected: false,
         isSelectable: false,
         mesh: null
@@ -69,59 +74,58 @@ export class BoardModel {
   }
 
   /**
-   * Check edge freedom (Mahjong Solitaire rule)
-   * Free if at least one horizontal axis has an unblocked side
+   * Check if tile is wedged between walls / neighboring tiles horizontally
+   * Trapped if both X directions (Left & Right) AND both Z directions (Front & Back) are blocked
    */
-  isEdgeBlocked(tile) {
-    if (this.ruleMode === "casual") {
-      return false; // Mode A: only top matters
-    }
+  isWallTrapped(tile) {
+    if (tile.isWall) return false;
 
-    // Mode B: Mahjong Solitaire 3D freedom
-    // Check Left/Right (X axis) and Front/Back (Z axis)
     const hasLeft = this.tiles.some(t => 
       t.id !== tile.id && 
       Math.abs(t.y - tile.y) < 0.4 &&
-      Math.abs(t.z - tile.z) < 0.7 &&
-      (tile.x - t.x) > 0.4 && (tile.x - t.x) < 1.3
+      Math.abs(t.z - tile.z) < 0.65 &&
+      (tile.x - t.x) > 0.4 && (tile.x - t.x) < 1.35
     );
 
     const hasRight = this.tiles.some(t => 
       t.id !== tile.id && 
       Math.abs(t.y - tile.y) < 0.4 &&
-      Math.abs(t.z - tile.z) < 0.7 &&
-      (t.x - tile.x) > 0.4 && (t.x - tile.x) < 1.3
+      Math.abs(t.z - tile.z) < 0.65 &&
+      (t.x - tile.x) > 0.4 && (t.x - tile.x) < 1.35
     );
 
     const hasFront = this.tiles.some(t => 
       t.id !== tile.id && 
       Math.abs(t.y - tile.y) < 0.4 &&
-      Math.abs(t.x - tile.x) < 0.7 &&
-      (t.z - tile.z) > 0.4 && (t.z - tile.z) < 1.3
+      Math.abs(t.x - tile.x) < 0.65 &&
+      (t.z - tile.z) > 0.4 && (t.z - tile.z) < 1.35
     );
 
     const hasBack = this.tiles.some(t => 
       t.id !== tile.id && 
       Math.abs(t.y - tile.y) < 0.4 &&
-      Math.abs(t.x - tile.x) < 0.7 &&
-      (tile.z - t.z) > 0.4 && (tile.z - t.z) < 1.3
+      Math.abs(t.x - tile.x) < 0.65 &&
+      (tile.z - t.z) > 0.4 && (tile.z - t.z) < 1.35
     );
 
-    // If both left and right are blocked AND both front and back are blocked,
-    // then the tile is trapped inside!
-    const isXBlocked = hasLeft && hasRight;
-    const isZBlocked = hasFront && hasBack;
-
-    return isXBlocked && isZBlocked;
+    // Trapped if both lateral axes have no open extraction corridor
+    return (hasLeft && hasRight) && (hasFront && hasBack);
   }
 
   /**
    * Recompute isSelectable flag for all alive tiles
-   * Unblocked from top AND not frozen is selectable
+   * Unblocked from top AND not frozen AND not trapped by walls is selectable
    */
   updateSelectability() {
     this.tiles.forEach(tile => {
-      tile.isSelectable = !this.isTopBlocked(tile) && !tile.isFrozen;
+      if (tile.isWall) {
+        tile.isSelectable = false;
+        return;
+      }
+      const topBlocked = this.isTopBlocked(tile);
+      const wallTrapped = this.isWallTrapped(tile);
+      tile.isTrapped = wallTrapped;
+      tile.isSelectable = !topBlocked && !tile.isFrozen && !wallTrapped;
     });
   }
 
@@ -161,7 +165,8 @@ export class BoardModel {
         y: t.y,
         z: t.z,
         value: t.value,
-        isFrozen: !!t.isFrozen
+        isFrozen: !!t.isFrozen,
+        isWall: !!t.isWall
       }))
     };
     this.historyStack.push(state);
@@ -189,6 +194,8 @@ export class BoardModel {
     const sortedTiles = [...this.tiles].sort((a, b) => a.y - b.y);
 
     sortedTiles.forEach(tile => {
+      if (tile.isWall) return; // Walls are anchored fortress obstacles, never fall
+
       let targetY = tile.y;
 
       for (let testY = 0; testY < tile.y; testY++) {
@@ -245,7 +252,7 @@ export class BoardModel {
    * Find available matching pairs among selectable tiles
    */
   findAvailablePairs() {
-    const selectable = this.tiles.filter(t => t.isSelectable);
+    const selectable = this.tiles.filter(t => t.isSelectable && !t.isWall);
     const pairs = [];
 
     for (let i = 0; i < selectable.length; i++) {
@@ -264,8 +271,8 @@ export class BoardModel {
    */
   smartShuffle() {
     this.updateSelectability();
-    const selectableTiles = this.tiles.filter(t => t.isSelectable);
-    const values = this.tiles.map(t => t.value);
+    const selectableTiles = this.tiles.filter(t => t.isSelectable && !t.isWall);
+    const values = this.tiles.filter(t => !t.isWall).map(t => t.value);
 
     // Count value frequencies
     const counts = new Map();
@@ -352,7 +359,7 @@ export class BoardModel {
   }
 
   getRemainingCount() {
-    return this.tiles.length;
+    return this.tiles.filter(t => !t.isWall).length;
   }
 
   getMaxTileValue() {

@@ -127,6 +127,9 @@ body, html {
   padding-bottom: max(14px, env(safe-area-inset-bottom));
   padding-left: max(16px, env(safe-area-inset-left));
   padding-right: max(16px, env(safe-area-inset-right));
+  contain: layout style paint;
+  will-change: transform;
+  transform: translateZ(0);
 }
 
 /* Enable pointer events on interactive UI */

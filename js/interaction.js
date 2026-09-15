@@ -20,7 +20,22 @@ export class InteractionHandler {
     this.lastEmptyTapTime = 0;
     this.lastEmptyTapPos = { x: 0, y: 0 };
 
+    // Performance optimizations: cached DOM rect & hover throttling
+    this.cachedRect = null;
+    this.lastHoverTime = 0;
+    this.currentCursor = 'default';
+
+    this.onResize = () => { this.cachedRect = null; };
+    window.addEventListener('resize', this.onResize, { passive: true });
+
     this.initEvents();
+  }
+
+  getRect() {
+    if (!this.cachedRect) {
+      this.cachedRect = this.domElement.getBoundingClientRect();
+    }
+    return this.cachedRect;
   }
 
   initEvents() {
@@ -28,9 +43,19 @@ export class InteractionHandler {
     this.domElement.addEventListener('pointerup', (e) => this.onPointerUp(e));
     this.domElement.addEventListener('pointercancel', (e) => this.onPointerCancel(e));
     this.domElement.addEventListener('pointermove', (e) => this.onPointerMove(e), { passive: true });
+    this.domElement.addEventListener('pointerleave', () => {
+      this.cachedRect = null;
+      if (this.currentCursor !== 'default') {
+        this.currentCursor = 'default';
+        this.domElement.style.cursor = 'default';
+      }
+    });
   }
 
   onPointerDown(e) {
+    // Guarantee updated coordinates on pointer down
+    this.cachedRect = this.domElement.getBoundingClientRect();
+
     // Wake up demand-driven renderer immediately
     if (this.renderer && this.renderer.requestRender) {
       this.renderer.requestRender(60); // request at least 60 frames for smooth drag start
@@ -67,14 +92,22 @@ export class InteractionHandler {
       }
     }
 
-    // Hover cursor for desktop mouse
+    // Hover cursor for desktop mouse only (throttle raycast to ~45ms, ignore touch events)
     if (e.pointerType === 'mouse' && this.activePointers.size === 0) {
-      const rect = this.domElement.getBoundingClientRect();
-      const normX = ((e.clientX - rect.left) / rect.width) * 2 - 1;
-      const normY = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+      const now = performance.now();
+      if (now - this.lastHoverTime > 45) {
+        this.lastHoverTime = now;
+        const rect = this.getRect();
+        const normX = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+        const normY = -((e.clientY - rect.top) / rect.height) * 2 + 1;
 
-      const tileId = this.renderer.raycastTile(normX, normY);
-      this.domElement.style.cursor = (tileId !== null) ? 'pointer' : 'default';
+        const tileId = this.renderer.raycastTile(normX, normY);
+        const nextCursor = (tileId !== null) ? 'pointer' : 'default';
+        if (this.currentCursor !== nextCursor) {
+          this.currentCursor = nextCursor;
+          this.domElement.style.cursor = nextCursor;
+        }
+      }
     }
   }
 
@@ -105,7 +138,7 @@ export class InteractionHandler {
 
     // Fast, deliberate tap
     if (dist < threshold && duration < 400 && !ptr.hasDragged) {
-      const rect = this.domElement.getBoundingClientRect();
+      const rect = this.getRect();
       const normX = ((e.clientX - rect.left) / rect.width) * 2 - 1;
       const normY = -((e.clientY - rect.top) / rect.height) * 2 + 1;
 

@@ -48,6 +48,13 @@ export class GameRenderer {
 
     // Meshes map: tileId -> THREE.Mesh
     this.tileMeshes = new Map();
+    // Flat array of meshes for zero-allocation raycasting
+    this.tileMeshArray = [];
+
+    // Reusable math vectors & object pools (Zero-GC)
+    this.tempVec = new THREE.Vector3();
+    this.shockwavePool = [];
+    this.pooledTrajectoryLine = null;
 
     // Active Particles & Reusable Particle Pool (Eliminates GC lag!)
     this.particles = [];
@@ -104,6 +111,22 @@ export class GameRenderer {
   }
 
   /**
+   * Request static shadow pass update (called only when tiles physically move)
+   */
+  requestShadowUpdate() {
+    if (this.renderer && this.renderer.shadowMap) {
+      this.renderer.shadowMap.needsUpdate = true;
+    }
+  }
+
+  /**
+   * Synchronize flat mesh array for zero-allocation raycasting
+   */
+  updateMeshArray() {
+    this.tileMeshArray = Array.from(this.tileMeshes.values());
+  }
+
+  /**
    * Safely disposes geometry only if it is NOT part of the shared pools
    */
   safeDisposeGeometry(geo) {
@@ -140,6 +163,8 @@ export class GameRenderer {
     this.renderer.setSize(width, height);
     this.renderer.setPixelRatio(this.isMobile ? Math.min(window.devicePixelRatio, 1.5) : Math.min(window.devicePixelRatio, 2));
     this.renderer.shadowMap.enabled = true;
+    this.renderer.shadowMap.autoUpdate = false;
+    this.renderer.shadowMap.needsUpdate = true;
     this.renderer.shadowMap.type = this.isMobile ? THREE.BasicShadowMap : THREE.PCFSoftShadowMap;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 1.15;
@@ -176,7 +201,7 @@ export class GameRenderer {
     const sunLight = new THREE.DirectionalLight(0xfff7ed, 1.6);
     sunLight.position.set(8, 16, 10);
     sunLight.castShadow = true;
-    const shadowRes = this.isMobile ? 1024 : 2048;
+    const shadowRes = this.isMobile ? 512 : 2048;
     sunLight.shadow.mapSize.width = shadowRes;
     sunLight.shadow.mapSize.height = shadowRes;
     sunLight.shadow.camera.near = 0.5;
@@ -267,88 +292,92 @@ export class GameRenderer {
       return this.textureCache.get(key);
     }
 
+    // Adaptive canvas resolution: 256x256 on mobile (saves 75% VRAM), 512x512 on desktop
+    const size = this.isMobile ? 256 : 512;
+    const s = size / 512;
+
     const canvas = document.createElement('canvas');
-    canvas.width = 512;
-    canvas.height = 512;
+    canvas.width = size;
+    canvas.height = size;
     const ctx = canvas.getContext('2d');
 
     const config = TILE_COLORS[value] || { bg: "#ff5722", text: "#ffffff", border: "#e64a19" };
 
     if (isFrozen) {
       // Ice crystal background gradient
-      const grad = ctx.createLinearGradient(0, 0, 512, 512);
+      const grad = ctx.createLinearGradient(0, 0, size, size);
       grad.addColorStop(0, '#c7e6fc');
       grad.addColorStop(0.5, '#7dd3fc');
       grad.addColorStop(1, '#38bdf8');
       ctx.fillStyle = grad;
-      ctx.fillRect(0, 0, 512, 512);
+      ctx.fillRect(0, 0, size, size);
 
       // Frost white outer border
-      ctx.lineWidth = 26;
+      ctx.lineWidth = 26 * s;
       ctx.strokeStyle = '#ffffff';
-      ctx.strokeRect(16, 16, 480, 480);
+      ctx.strokeRect(16 * s, 16 * s, 480 * s, 480 * s);
 
       // Inner icy cyan border
-      ctx.lineWidth = 8;
+      ctx.lineWidth = 8 * s;
       ctx.strokeStyle = 'rgba(14, 165, 233, 0.7)';
-      ctx.strokeRect(34, 34, 444, 444);
+      ctx.strokeRect(34 * s, 34 * s, 444 * s, 444 * s);
 
       // Corner ice crystals
       ctx.fillStyle = '#ffffff';
-      const cornerSize = 44;
-      ctx.fillRect(20, 20, cornerSize, cornerSize);
-      ctx.fillRect(512 - 20 - cornerSize, 20, cornerSize, cornerSize);
-      ctx.fillRect(20, 512 - 20 - cornerSize, cornerSize, cornerSize);
-      ctx.fillRect(512 - 20 - cornerSize, 512 - 20 - cornerSize, cornerSize, cornerSize);
+      const cornerSize = 44 * s;
+      ctx.fillRect(20 * s, 20 * s, cornerSize, cornerSize);
+      ctx.fillRect(size - 20 * s - cornerSize, 20 * s, cornerSize, cornerSize);
+      ctx.fillRect(20 * s, size - 20 * s - cornerSize, cornerSize, cornerSize);
+      ctx.fillRect(size - 20 * s - cornerSize, size - 20 * s - cornerSize, cornerSize, cornerSize);
 
       // Frost crack lines
       ctx.strokeStyle = 'rgba(255, 255, 255, 0.85)';
-      ctx.lineWidth = 5;
+      ctx.lineWidth = Math.max(2, 5 * s);
       ctx.lineCap = 'round';
       ctx.beginPath();
-      ctx.moveTo(60, 80); ctx.lineTo(190, 180); ctx.lineTo(140, 290);
-      ctx.moveTo(450, 90); ctx.lineTo(330, 210); ctx.lineTo(390, 340);
-      ctx.moveTo(110, 440); ctx.lineTo(240, 360); ctx.lineTo(370, 430);
+      ctx.moveTo(60 * s, 80 * s); ctx.lineTo(190 * s, 180 * s); ctx.lineTo(140 * s, 290 * s);
+      ctx.moveTo(450 * s, 90 * s); ctx.lineTo(330 * s, 210 * s); ctx.lineTo(390 * s, 340 * s);
+      ctx.moveTo(110 * s, 440 * s); ctx.lineTo(240 * s, 360 * s); ctx.lineTo(370 * s, 430 * s);
       ctx.stroke();
 
       // Number in ice
       const textStr = value.toString();
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      if (textStr.length === 1) ctx.font = '900 240px Outfit, sans-serif';
-      else if (textStr.length === 2) ctx.font = '900 200px Outfit, sans-serif';
-      else if (textStr.length === 3) ctx.font = '900 165px Outfit, sans-serif';
-      else ctx.font = '900 135px Outfit, sans-serif';
+      if (textStr.length === 1) ctx.font = `900 ${Math.round(240 * s)}px Outfit, sans-serif`;
+      else if (textStr.length === 2) ctx.font = `900 ${Math.round(200 * s)}px Outfit, sans-serif`;
+      else if (textStr.length === 3) ctx.font = `900 ${Math.round(165 * s)}px Outfit, sans-serif`;
+      else ctx.font = `900 ${Math.round(135 * s)}px Outfit, sans-serif`;
 
-      ctx.lineWidth = 14;
+      ctx.lineWidth = Math.max(3, 14 * s);
       ctx.strokeStyle = '#ffffff';
-      ctx.strokeText(textStr, 256, 285);
+      ctx.strokeText(textStr, 256 * s, 285 * s);
 
       ctx.fillStyle = '#0369a1';
-      ctx.fillText(textStr, 256, 285);
+      ctx.fillText(textStr, 256 * s, 285 * s);
 
       // Top Frost Crystal Emblem ❄️
-      ctx.font = 'bold 96px sans-serif';
+      ctx.font = `bold ${Math.round(96 * s)}px sans-serif`;
       ctx.fillStyle = 'rgba(255, 255, 255, 0.95)';
       ctx.shadowColor = 'rgba(14, 165, 233, 0.9)';
-      ctx.shadowBlur = 18;
-      ctx.fillText("❄️", 256, 125);
+      ctx.shadowBlur = 18 * s;
+      ctx.fillText("❄️", 256 * s, 125 * s);
       ctx.shadowColor = 'transparent';
     } else {
       // Normal Tile
       ctx.fillStyle = config.bg;
-      ctx.fillRect(0, 0, 512, 512);
+      ctx.fillRect(0, 0, size, size);
 
-      ctx.lineWidth = 24;
+      ctx.lineWidth = Math.max(3, 24 * s);
       ctx.strokeStyle = config.border;
-      ctx.strokeRect(16, 16, 480, 480);
+      ctx.strokeRect(16 * s, 16 * s, 480 * s, 480 * s);
 
       ctx.fillStyle = config.border;
-      const cornerSize = 40;
-      ctx.fillRect(20, 20, cornerSize, cornerSize);
-      ctx.fillRect(512 - 20 - cornerSize, 20, cornerSize, cornerSize);
-      ctx.fillRect(20, 512 - 20 - cornerSize, cornerSize, cornerSize);
-      ctx.fillRect(512 - 20 - cornerSize, 512 - 20 - cornerSize, cornerSize, cornerSize);
+      const cornerSize = 40 * s;
+      ctx.fillRect(20 * s, 20 * s, cornerSize, cornerSize);
+      ctx.fillRect(size - 20 * s - cornerSize, 20 * s, cornerSize, cornerSize);
+      ctx.fillRect(20 * s, size - 20 * s - cornerSize, cornerSize, cornerSize);
+      ctx.fillRect(size - 20 * s - cornerSize, size - 20 * s - cornerSize, cornerSize, cornerSize);
 
       ctx.fillStyle = config.text;
       ctx.textAlign = 'center';
@@ -356,40 +385,40 @@ export class GameRenderer {
       
       const textStr = value.toString();
       if (textStr.length === 1) {
-        ctx.font = '900 270px Outfit, sans-serif';
+        ctx.font = `900 ${Math.round(270 * s)}px Outfit, sans-serif`;
       } else if (textStr.length === 2) {
-        ctx.font = '900 230px Outfit, sans-serif';
+        ctx.font = `900 ${Math.round(230 * s)}px Outfit, sans-serif`;
       } else if (textStr.length === 3) {
-        ctx.font = '900 185px Outfit, sans-serif';
+        ctx.font = `900 ${Math.round(185 * s)}px Outfit, sans-serif`;
       } else {
-        ctx.font = '900 150px Outfit, sans-serif';
+        ctx.font = `900 ${Math.round(150 * s)}px Outfit, sans-serif`;
       }
 
       ctx.lineJoin = 'round';
       if (config.text === '#ffffff') {
         ctx.strokeStyle = 'rgba(0, 0, 0, 0.45)';
-        ctx.lineWidth = (textStr.length <= 2) ? 14 : 10;
-        ctx.strokeText(textStr, 256, 256);
+        ctx.lineWidth = (textStr.length <= 2) ? Math.max(3, 14 * s) : Math.max(2, 10 * s);
+        ctx.strokeText(textStr, 256 * s, 256 * s);
       } else {
         ctx.strokeStyle = 'rgba(255, 255, 255, 0.9)';
-        ctx.lineWidth = 12;
-        ctx.strokeText(textStr, 256, 256);
+        ctx.lineWidth = Math.max(3, 12 * s);
+        ctx.strokeText(textStr, 256 * s, 256 * s);
       }
 
       ctx.shadowColor = 'rgba(0, 0, 0, 0.35)';
-      ctx.shadowBlur = 10;
-      ctx.shadowOffsetX = 2;
-      ctx.shadowOffsetY = 4;
-      ctx.fillText(textStr, 256, 256);
+      ctx.shadowBlur = 10 * s;
+      ctx.shadowOffsetX = 2 * s;
+      ctx.shadowOffsetY = 4 * s;
+      ctx.fillText(textStr, 256 * s, 256 * s);
       ctx.shadowColor = 'transparent';
 
       if (!isSelectable) {
         ctx.fillStyle = 'rgba(10, 14, 23, 0.7)';
-        ctx.fillRect(0, 0, 512, 512);
+        ctx.fillRect(0, 0, size, size);
 
-        ctx.font = '90px sans-serif';
+        ctx.font = `${Math.round(90 * s)}px sans-serif`;
         ctx.fillStyle = 'rgba(255, 255, 255, 0.75)';
-        ctx.fillText("🔒", 256, 256);
+        ctx.fillText("🔒", 256 * s, 256 * s);
       }
     }
 
@@ -476,6 +505,9 @@ export class GameRenderer {
       tile.mesh = mesh;
     });
 
+    this.updateMeshArray();
+    this.requestShadowUpdate();
+
     if (this.selectionBeacon) {
       this.selectionBeacon.visible = false;
     }
@@ -549,19 +581,26 @@ export class GameRenderer {
 
     const startX = mesh.position.x;
     const offsets = [-0.035, 0.035, -0.025, 0.02, 0];
-    let step = 0;
+    const duration = 140;
+    const startTime = performance.now();
+    this.activeAnimationCount++;
 
-    const shakeInterval = setInterval(() => {
-      if (step < offsets.length) {
-        mesh.position.x = startX + offsets[step];
-        this.requestRender(4);
-        step++;
+    const tween = (now) => {
+      const elapsed = now - startTime;
+      const progress = Math.min(elapsed / duration, 1);
+      const stepIdx = Math.min(Math.floor(progress * offsets.length), offsets.length - 1);
+
+      mesh.position.x = startX + offsets[stepIdx];
+      this.requestRender(4);
+
+      if (progress < 1) {
+        requestAnimationFrame(tween);
       } else {
         mesh.position.x = startX;
-        clearInterval(shakeInterval);
-        this.requestRender(4);
+        this.activeAnimationCount = Math.max(0, this.activeAnimationCount - 1);
       }
-    }, 28);
+    };
+    requestAnimationFrame(tween);
   }
 
   /**
@@ -778,19 +817,12 @@ export class GameRenderer {
     const midPos = startPos.clone().add(endPos).multiplyScalar(0.5);
     midPos.y = Math.max(startPos.y, endPos.y) + Math.min(2.8, 1.0 + dist * 0.22);
 
-    // Create 3D Luminous Trajectory Route Line (光弧能量路線)
+    // Create or reuse 3D Luminous Trajectory Route Line (光弧能量路線)
     const curve = new THREE.QuadraticBezierCurve3(startPos, midPos, endPos);
-    const points = curve.getPoints(this.isMobile ? 24 : 36);
-    const lineGeo = new THREE.BufferGeometry().setFromPoints(points);
-    const lineMat = new THREE.LineBasicMaterial({
-      color: 0x00f7ff,
-      linewidth: 3,
-      transparent: true,
-      opacity: 0.95
-    });
-    const trajectoryLine = new THREE.Line(lineGeo, lineMat);
-    this.scene.add(trajectoryLine);
-    this.activeTrajectoryLines.push(trajectoryLine);
+    const points = curve.getPoints(this.isMobile ? 20 : 36);
+    const trajectoryLine = this.getTrajectoryLine(points);
+
+    this.requestShadowUpdate();
 
     const duration = Math.min(420, Math.max(260, dist * 50));
     const startTime = performance.now();
@@ -799,9 +831,7 @@ export class GameRenderer {
     let isCancelled = false;
     const cancelFn = () => {
       isCancelled = true;
-      this.scene.remove(trajectoryLine);
-      lineGeo.dispose();
-      lineMat.dispose();
+      trajectoryLine.visible = false;
     };
     this.activeTweens.push(cancelFn);
 
@@ -815,14 +845,14 @@ export class GameRenderer {
       const progress = Math.min(elapsed / duration, 1);
       const ease = 1 - Math.pow(1 - progress, 3);
 
-      const curPos = curve.getPoint(ease);
-      meshA.position.copy(curPos);
+      curve.getPoint(ease, this.tempVec);
+      meshA.position.copy(this.tempVec);
       meshA.rotation.y = ease * Math.PI * 1.5;
       meshA.scale.setScalar(1 - progress * 0.25);
 
       // Emit trail sparks along flight path
-      if (Math.random() < 0.6) {
-        this.createTrailParticle(curPos, tileA.value);
+      if (Math.random() < 0.5) {
+        this.createTrailParticle(this.tempVec, tileA.value);
       }
 
       this.requestRender(5);
@@ -834,12 +864,8 @@ export class GameRenderer {
         const idx = this.activeTweens.indexOf(cancelFn);
         if (idx !== -1) this.activeTweens.splice(idx, 1);
 
-        // Remove trajectory route line
-        this.scene.remove(trajectoryLine);
-        const lineIdx = this.activeTrajectoryLines.indexOf(trajectoryLine);
-        if (lineIdx !== -1) this.activeTrajectoryLines.splice(lineIdx, 1);
-        lineGeo.dispose();
-        lineMat.dispose();
+        // Hide trajectory route line (reused, no GC!)
+        trajectoryLine.visible = false;
 
         // 1. Shockwave Ring
         this.createShockwave(endPos, tileB.value);
@@ -854,12 +880,35 @@ export class GameRenderer {
         this.scene.remove(meshA);
         this.safeDisposeGeometry(meshA.geometry);
         this.tileMeshes.delete(tileA.id);
+        this.updateMeshArray();
+        this.requestShadowUpdate();
 
         if (onComplete) onComplete();
       }
     };
 
     requestAnimationFrame(tween);
+  }
+
+  /**
+   * Reusable pooled Trajectory Line
+   */
+  getTrajectoryLine(points) {
+    if (!this.pooledTrajectoryLine) {
+      const geo = new THREE.BufferGeometry().setFromPoints(points);
+      const mat = new THREE.LineBasicMaterial({
+        color: 0x00f7ff,
+        linewidth: 3,
+        transparent: true,
+        opacity: 0.95
+      });
+      this.pooledTrajectoryLine = new THREE.Line(geo, mat);
+      this.scene.add(this.pooledTrajectoryLine);
+    } else {
+      this.pooledTrajectoryLine.geometry.setFromPoints(points);
+      this.pooledTrajectoryLine.visible = true;
+    }
+    return this.pooledTrajectoryLine;
   }
 
   /**
@@ -906,6 +955,7 @@ export class GameRenderer {
     const duration = 260;
     const startTime = performance.now();
     this.activeAnimationCount++;
+    this.requestShadowUpdate();
 
     const dropStates = drops.map(d => {
       const mesh = this.tileMeshes.get(d.tile.id);
@@ -946,6 +996,7 @@ export class GameRenderer {
         dropStates.forEach(d => {
           d.mesh.position.y = d.targetY;
         });
+        this.requestShadowUpdate();
         if (onComplete) onComplete();
       }
     };
@@ -1004,17 +1055,29 @@ export class GameRenderer {
   createShockwave(pos, value) {
     const geo = this.shockwaveGeo;
     const config = TILE_COLORS[value] || { bg: "#00f7ff" };
-    const mat = new THREE.MeshBasicMaterial({
-      color: new THREE.Color(config.bg),
-      side: THREE.DoubleSide,
-      transparent: true,
-      opacity: 0.95
-    });
-    const ring = new THREE.Mesh(geo, mat);
-    ring.rotation.x = -Math.PI / 2;
-    ring.position.copy(pos);
-    ring.position.y += 0.04;
-    this.scene.add(ring);
+    const colorHex = parseInt(config.bg.replace("#", "0x"), 16);
+
+    let shock = this.shockwavePool.pop();
+    if (!shock) {
+      const mat = new THREE.MeshBasicMaterial({
+        color: colorHex,
+        side: THREE.DoubleSide,
+        transparent: true,
+        opacity: 0.95
+      });
+      const ring = new THREE.Mesh(geo, mat);
+      ring.rotation.x = -Math.PI / 2;
+      this.scene.add(ring);
+      shock = { ring, mat };
+    } else {
+      shock.mat.color.setHex(colorHex);
+      shock.mat.opacity = 0.95;
+      shock.ring.visible = true;
+    }
+
+    shock.ring.position.copy(pos);
+    shock.ring.position.y += 0.04;
+    shock.ring.scale.set(1, 1, 1);
 
     const startTime = performance.now();
     const duration = 360;
@@ -1024,8 +1087,8 @@ export class GameRenderer {
       const elapsed = now - startTime;
       const progress = Math.min(elapsed / duration, 1);
       const scale = 1 + progress * 3.4;
-      ring.scale.set(scale, scale, 1);
-      ring.material.opacity = 0.95 * (1 - Math.pow(progress, 2));
+      shock.ring.scale.set(scale, scale, 1);
+      shock.mat.opacity = 0.95 * (1 - Math.pow(progress, 2));
 
       this.requestRender(4);
 
@@ -1033,9 +1096,8 @@ export class GameRenderer {
         requestAnimationFrame(tween);
       } else {
         this.activeAnimationCount = Math.max(0, this.activeAnimationCount - 1);
-        this.scene.remove(ring);
-        this.safeDisposeGeometry(geo);
-        mat.dispose();
+        shock.ring.visible = false;
+        this.shockwavePool.push(shock);
       }
     };
     requestAnimationFrame(tween);
@@ -1158,7 +1220,9 @@ export class GameRenderer {
     this.mouse.y = normY;
     this.raycaster.setFromCamera(this.mouse, this.camera);
 
-    const meshes = Array.from(this.tileMeshes.values());
+    const meshes = (this.tileMeshArray && this.tileMeshArray.length > 0)
+      ? this.tileMeshArray 
+      : Array.from(this.tileMeshes.values());
     const intersects = this.raycaster.intersectObjects(meshes, false);
 
     if (intersects.length > 0) {
@@ -1188,12 +1252,18 @@ export class GameRenderer {
     this.activeTweens = [];
     this.activeAnimationCount = 0;
 
+    if (this.pooledTrajectoryLine) {
+      this.pooledTrajectoryLine.visible = false;
+    }
     this.activeTrajectoryLines.forEach(line => {
       this.scene.remove(line);
       line.geometry.dispose();
       line.material.dispose();
     });
     this.activeTrajectoryLines = [];
+    this.shockwavePool.forEach(s => {
+      if (s.ring) s.ring.visible = false;
+    });
 
     for (let i = this.particles.length - 1; i >= 0; i--) {
       const p = this.particles[i];

@@ -49,11 +49,7 @@ export const LEVELS = [
       coords.push({ x: -0.6, y: 0, z: 0, isFrozen: true });
       coords.push({ x: 0.6, y: 0, z: 0, isFrozen: true });
 
-      // === 兩翼黑曜石城壁 (卡牆障礙) ===
-      coords.push({ x: -4.5, y: 0, z: 0, isWall: true });
-      coords.push({ x: 4.5, y: 0, z: 0, isWall: true });
-
-      return coords; // Total: 14 + 14 + 2 + 2 = 32 tiles (30 playable)
+      return coords; // Total: 14 + 14 + 2 = 30 tiles
     }
   },
   {
@@ -98,11 +94,7 @@ export const LEVELS = [
       coords.push({ x: 2.5, y: 0, z: -1.5, isFrozen: true });
       coords.push({ x: 2.5, y: 0, z: 1.5, isFrozen: true });
 
-      // 中樞要塞黑曜石防禦牆
-      coords.push({ x: -1.2, y: 0, z: 0, isWall: true });
-      coords.push({ x: 1.2, y: 0, z: 0, isWall: true });
-
-      return coords; // Total: 14 + 14 + 8 + 2 = 38 tiles (36 playable)
+      return coords; // Total: 14 + 14 + 8 = 36 tiles
     }
   },
   {
@@ -254,9 +246,7 @@ export const LEVELS = [
  * Decomposes 2048 targets into smaller numbers, guaranteeing 100% solvability.
  */
 export function generateNumbersForGrid(coords, levelId = 1, targetValue = 2048) {
-  // Only allocate 2048-decomposed numbers to playable non-wall tiles
-  const playableCoords = coords.filter(c => !c.isWall);
-  const count = playableCoords.length;
+  const count = coords.length;
 
   // Number of 2048 targets (e.g. 30~38 tiles decompose from 3 or 4 targets of 2048)
   const numTargets = Math.max(1, Math.floor(count / 10));
@@ -285,7 +275,7 @@ export function generateNumbersForGrid(coords, levelId = 1, targetValue = 2048) 
 
   // Sort coordinates by spatial accessibility:
   // Higher Y first; for same Y, outermost (larger |x|) first
-  const sortedCoords = [...playableCoords].sort((a, b) => {
+  const sortedCoords = [...coords].sort((a, b) => {
     if (b.y !== a.y) return b.y - a.y;
     const distA = Math.abs(a.x) * 1.5 + Math.abs(a.z);
     const distB = Math.abs(b.x) * 1.5 + Math.abs(b.z);
@@ -295,7 +285,7 @@ export function generateNumbersForGrid(coords, levelId = 1, targetValue = 2048) 
   // Assign numbers to coordinates
   const numbers = new Array(count);
   sortedCoords.forEach((coord, i) => {
-    const origIdx = playableCoords.indexOf(coord);
+    const origIdx = coords.indexOf(coord);
     numbers[origIdx] = list[i];
   });
 

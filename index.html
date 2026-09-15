@@ -108,24 +108,12 @@
         <span id="target-2048-status" class="target-status">目標: 合併至 2048 消除</span>
       </div>
 
-      <!-- Action Power-up Buttons -->
+      <!-- Action Buttons -->
       <div class="action-buttons">
         <button id="undo-btn" class="action-btn" title="回復上一步操作">
           <span class="btn-emoji">↩️</span>
           <span class="btn-text">上一步</span>
-          <span id="undo-count" class="badge">3</span>
-        </button>
-
-        <button id="hint-btn" class="action-btn" title="提示一對可選相同方塊">
-          <span class="btn-emoji">💡</span>
-          <span class="btn-text">提示</span>
-          <span id="hint-count" class="badge">3</span>
-        </button>
-
-        <button id="shuffle-btn" class="action-btn" title="保持形狀隨機打亂數字">
-          <span class="btn-emoji">🔀</span>
-          <span class="btn-text">洗牌</span>
-          <span id="shuffle-count" class="badge">2</span>
+          <span id="undo-count" class="badge">5</span>
         </button>
 
         <button id="restart-btn" class="action-btn secondary" title="重新挑戰本關">
@@ -228,16 +216,13 @@
       <div class="deadlock-icon">⚠️</div>
       <h2>無路可走 (No More Moves)</h2>
       <p>目前所有可選的方塊中，找不到任何相同數字配對了！</p>
-      <div class="deadlock-tip">使用道具來化解危機吧：</div>
+      <div class="deadlock-tip">挑戰受阻！您可以嘗試：</div>
       <div class="deadlock-actions">
-        <button id="deadlock-undo-btn" class="action-btn">
-          <span>↩️ 上一步</span>
-        </button>
-        <button id="deadlock-shuffle-btn" class="action-btn primary highlight-glow">
-          <span>🔀 重新洗牌</span>
+        <button id="deadlock-undo-btn" class="action-btn primary highlight-glow">
+          <span>↩️ 回退上一步</span>
         </button>
         <button id="deadlock-restart-btn" class="action-btn secondary">
-          <span>🔄 重開本關</span>
+          <span>🔄 重新開始挑戰</span>
         </button>
       </div>
     </div>

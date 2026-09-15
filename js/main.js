@@ -23,9 +23,7 @@ class Mahjong2048Game {
     this.activeHintTiles = null;
 
     // Power-up counts
-    this.undoCount = 3;
-    this.hintCount = 3;
-    this.shuffleCount = 2;
+    this.undoCount = 5;
 
     // Modules
     this.sound = new SoundEngine();
@@ -40,7 +38,9 @@ class Mahjong2048Game {
     );
 
     this.initDOM();
-    this.startLevel(0);
+    const urlParamLevel = parseInt(new URLSearchParams(window.location.search).get('level') || '1', 10);
+    const initialLevelIndex = (!isNaN(urlParamLevel) && urlParamLevel >= 1 && urlParamLevel <= LEVELS.length) ? urlParamLevel - 1 : 0;
+    this.startLevel(initialLevelIndex);
   }
 
   initDOM() {
@@ -126,14 +126,6 @@ class Mahjong2048Game {
     this.undoCountBadge = document.getElementById('undo-count');
     this.undoBtn.addEventListener('click', () => this.handleUndo());
 
-    this.hintBtn = document.getElementById('hint-btn');
-    this.hintCountBadge = document.getElementById('hint-count');
-    this.hintBtn.addEventListener('click', () => this.handleHint());
-
-    this.shuffleBtn = document.getElementById('shuffle-btn');
-    this.shuffleCountBadge = document.getElementById('shuffle-count');
-    this.shuffleBtn.addEventListener('click', () => this.handleShuffle());
-
     this.restartBtn = document.getElementById('restart-btn');
     this.restartBtn.addEventListener('click', () => this.startLevel(this.currentLevelIndex));
 
@@ -172,10 +164,6 @@ class Mahjong2048Game {
     document.getElementById('deadlock-undo-btn').addEventListener('click', () => {
       this.deadlockModal.classList.add('hidden');
       this.handleUndo();
-    });
-    document.getElementById('deadlock-shuffle-btn').addEventListener('click', () => {
-      this.deadlockModal.classList.add('hidden');
-      this.handleShuffle(true); // force shuffle if out of charges
     });
     document.getElementById('deadlock-restart-btn').addEventListener('click', () => {
       this.deadlockModal.classList.add('hidden');
@@ -253,8 +241,6 @@ class Mahjong2048Game {
 
     // Reset power-ups for new stage
     this.undoCount = 5;
-    this.hintCount = 5;
-    this.shuffleCount = 5;
     this.updatePowerupBadges();
 
     // Target display
@@ -269,11 +255,6 @@ class Mahjong2048Game {
     const numbers = generateNumbersForGrid(coords, level.id, targetVal);
 
     this.board.loadLevel(coords, numbers);
-
-    // Ensure at least 2 matching pairs exist on selectable tiles at start
-    if (this.board.findAvailablePairs().length < 2) {
-      this.board.smartShuffle();
-    }
 
     this.renderer.renderBoard(this.board.tiles);
     this.renderer.setCameraPreset('iso');
@@ -331,12 +312,8 @@ class Mahjong2048Game {
   }
 
   updatePowerupBadges() {
-    this.undoCountBadge.textContent = this.undoCount;
-    this.hintCountBadge.textContent = this.hintCount;
-    this.shuffleCountBadge.textContent = this.shuffleCount;
-    this.undoBtn.disabled = (this.undoCount <= 0 && this.board.historyStack.length === 0);
-    this.hintBtn.disabled = (this.hintCount <= 0);
-    this.shuffleBtn.disabled = (this.shuffleCount <= 0);
+    if (this.undoCountBadge) this.undoCountBadge.textContent = this.undoCount;
+    if (this.undoBtn) this.undoBtn.disabled = (this.undoCount <= 0 && this.board.historyStack.length === 0);
   }
 
   showBanner(text, duration = 1800) {
@@ -618,74 +595,6 @@ class Mahjong2048Game {
     this.sound.playSelect();
     this.haptics.tap();
     this.showBanner("↩️ 已成功復原上一步");
-  }
-
-  handleHint() {
-    if (this.isAnimating) return;
-    if (this.hintCount <= 0) {
-      this.showBanner("💡 提示次數已用盡！");
-      return;
-    }
-
-    const pairs = this.board.findAvailablePairs();
-    if (pairs.length === 0) {
-      this.showBanner("⚠️ 目前盤面沒有可選的配對！請使用洗牌！");
-      return;
-    }
-
-    this.hintCount--;
-    this.updatePowerupBadges();
-
-    const [tileA, tileB] = pairs[0];
-    this.activeHintTiles = [tileA, tileB];
-    this.renderer.highlightHintPair(tileA, tileB);
-    this.sound.playHint();
-    this.haptics.tap();
-    this.showBanner(`💡 為您標示了一組可合併的 [${tileA.value}] 方塊！`);
-
-    // Auto clear hint after 3.5s
-    setTimeout(() => {
-      if (this.activeHintTiles) {
-        this.renderer.clearHint(this.activeHintTiles[0], this.activeHintTiles[1]);
-        this.activeHintTiles = null;
-      }
-    }, 3500);
-  }
-
-  handleShuffle(force = false) {
-    if (this.isAnimating) return;
-    if (!force && this.shuffleCount <= 0) {
-      this.showBanner("🔀 洗牌次數已用盡！");
-      return;
-    }
-
-    if (!force && this.shuffleCount > 0) {
-      this.shuffleCount--;
-      this.updatePowerupBadges();
-    }
-
-    this.selectedTile = null;
-    this.board.smartShuffle();
-    this.board.tiles.forEach(t => this.renderer.updateTileVisuals(t));
-    this.sound.playShuffle();
-    this.haptics.tap();
-
-    const pairs = this.board.findAvailablePairs();
-    if (pairs.length > 0) {
-      this.showBanner("🔀 智慧洗牌成功！已為您保證生成可選配對！");
-      // Auto highlight new pair for 2.5s
-      const [tA, tB] = pairs[0];
-      this.activeHintTiles = [tA, tB];
-      this.renderer.highlightHintPair(tA, tB);
-      setTimeout(() => {
-        if (this.activeHintTiles) {
-          this.renderer.clearHint(this.activeHintTiles[0], this.activeHintTiles[1]);
-          this.activeHintTiles = null;
-        }
-      }, 2500);
-    } else {
-      this.showBanner("🔀 方塊已重新配置！");
-    }
   }
 }
 
